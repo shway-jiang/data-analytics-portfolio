@@ -1,8 +1,13 @@
 # E-commerce Funnel & Ad Efficiency Analysis
 
-**Status:** analysis done; Power BI dashboard and report in progress
+**Status:** analysis done; dashboard page 1 done, page 2 (ad efficiency) and report in progress
 
 A personal portfolio project. It looks at where an online store loses its customers, and at which ad campaigns and audiences give the best return. Only public datasets are used, and any assumption is labelled.
+
+## Dashboard
+**Page 1: Online store performance** (Power BI)
+
+![Store performance dashboard](dashboard/page1_store_performance.png)
 
 ## Questions
 1. Where in the purchase funnel do shoppers drop off?
