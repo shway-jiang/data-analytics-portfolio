@@ -1,0 +1,7 @@
+step_order,step,users,pct_of_viewers,pct_of_previous_step
+1,1 View item,61252,1.0,
+2,2 Add to cart,12545,0.2048,0.2048
+3,3 Begin checkout,9715,0.1586,0.7744
+4,4 Add shipping,9714,0.1586,0.9999
+5,5 Add payment,5751,0.0939,0.592
+6,6 Purchase,4419,0.0721,0.7684

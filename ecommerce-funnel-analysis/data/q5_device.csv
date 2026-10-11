@@ -1,0 +1,4 @@
+device,viewed,added_to_cart,began_checkout,purchased,view_to_purchase_rate
+desktop,35694,7261,5589,2512,0.0704
+mobile,24149,5003,3912,1810,0.075
+tablet,1409,281,214,97,0.0688
