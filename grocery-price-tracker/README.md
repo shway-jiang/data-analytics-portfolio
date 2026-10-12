@@ -19,6 +19,8 @@ A personal portfolio project on Canada's cost of living. It automatically record
 
 Columns: `date, store, owner, item_id, product_name, size, price, regular_price, on_sale, unit_price, unit, status, notes`
 
+Full agent instructions: [`collection_instructions.md`](collection_instructions.md)
+
 ## Benchmark
 Statistics Canada table [18-10-0245-01](https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1810024501), *Monthly average retail prices for selected products*. It's used as an industry average, not a control group.
 
