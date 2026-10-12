@@ -1,8 +1,10 @@
 # E-commerce Funnel & Ad Efficiency Analysis
 
-**Status:** analysis done; Power BI dashboard done (2 pages); written report in progress
+**Status:** analysis done; complete: SQL analysis, Power BI dashboard (2 pages) and written report
 
 A personal portfolio project. It looks at where an online store loses its customers, and at which ad campaigns and audiences give the best return. Only public datasets are used, and any assumption is labelled.
+
+📄 **[Read the report](report.md):** findings, recommendations and estimated impact on one page.
 
 ## Dashboard
 Interactive file: [`dashboard/ecommerce_funnel_dashboard.pbix`](dashboard/ecommerce_funnel_dashboard.pbix) (open with the free Power BI Desktop).
