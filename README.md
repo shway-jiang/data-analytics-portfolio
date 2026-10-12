@@ -4,7 +4,7 @@ Personal portfolio projects in SQL, Python, Power BI and AI-assisted automation.
 
 | Project | Skills | Status |
 |---|---|---|
-| [E-commerce Funnel & Ad Efficiency Analysis](ecommerce-funnel-analysis) | SQL (BigQuery, GA4), Python (pandas), Power BI | Analysis done, dashboard in progress |
+| [E-commerce Funnel & Ad Efficiency Analysis](ecommerce-funnel-analysis) | SQL (BigQuery, GA4), Python (pandas), Power BI | Dashboard done, report in progress |
 | [Canadian Grocery Price Tracker](grocery-price-tracker) | Automated data collection, data quality, benchmarking vs Statistics Canada | Collecting data (Oct–Nov 2026) |
 | [AIGC Content Pipeline + Ad-Claims Checker](aigc-content-pipeline) | LLM prompting, compliance logic, AIGC video | Coming soon |
 
