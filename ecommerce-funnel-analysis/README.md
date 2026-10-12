@@ -5,6 +5,8 @@
 A personal portfolio project. It looks at where an online store loses its customers, and at which ad campaigns and audiences give the best return. Only public datasets are used, and any assumption is labelled.
 
 ## Dashboard
+Interactive file: [`dashboard/ecommerce_funnel_dashboard.pbix`](dashboard/ecommerce_funnel_dashboard.pbix) (open with the free Power BI Desktop).
+
 **Page 1: Online store performance** (Power BI)
 
 ![Store performance dashboard](dashboard/page1_store_performance.png)
