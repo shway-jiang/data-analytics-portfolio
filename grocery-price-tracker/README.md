@@ -17,6 +17,14 @@ A personal portfolio project on Canada's cost of living. It automatically record
 - **Automation:** a scheduled AI agent runs every morning. It searches each store's website, picks the **cheapest product that matches the spec** (store brands included), and saves one CSV per day. If a page fails, it retries; anything still missing is marked `failed` or `no_match`, never guessed.
 - **About 60 price points a day, roughly 1,800 over the project**
 
+### Why these 15 items?
+It's a **staples basket**, not a weekly shopping list. Each item was chosen because it is:
+- **An everyday essential** that most households buy, covering the main food groups: dairy (milk, butter, cheese, eggs), protein (chicken, ground beef, peanut butter), grains (bread, rice, pasta), produce (bananas, apples, potatoes, carrots) and pantry (canned tomatoes)
+- **Sold at every store in a standard size** (e.g. 4 L milk, 900 g spaghetti), so prices compare like for like
+- **Comparable with official data**: most of the items also appear in Statistics Canada's monthly retail price table, which is used as the benchmark
+
+Fresh meat and produce are compared by **unit price** (per kg), because pack sizes vary.
+
 Columns: `date, store, owner, item_id, product_name, size, price, regular_price, on_sale, unit_price, unit, status, notes`
 
 Full agent instructions: [`collection_instructions.md`](collection_instructions.md)
