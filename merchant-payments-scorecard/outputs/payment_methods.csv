@@ -1,0 +1,5 @@
+payment_method,orders,order_share_pct,value_share_pct,avg_amount_paid,median_hours_to_approve,canceled_pct,avg_review_score
+credit_card,73889,75.5,78.5,166.59,0.3,1.11,4.09
+boleto,19479,19.9,18.0,144.65,29.1,1.23,4.09
+voucher,3028,3.1,2.2,114.93,0.3,3.04,4.02
+debit_card,1512,1.5,1.4,140.29,0.8,0.85,4.17

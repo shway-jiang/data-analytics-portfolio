@@ -1,0 +1,8 @@
+seller_type,signed_sellers,with_first_sale_pct,avg_days_to_first_sale,gmv_per_signed_seller
+online_medium,286,58.4,57.0,704.0
+online_big,108,69.4,45.0,2680.0
+industry,107,35.5,54.0,263.0
+offline,90,33.3,67.0,216.0
+online_small,65,43.1,51.0,807.0
+online_beginner,47,44.7,43.0,475.0
+online_top,14,42.9,27.0,585.0

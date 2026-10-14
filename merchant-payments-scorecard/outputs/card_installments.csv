@@ -1,0 +1,6 @@
+installment_plan,orders,order_share_pct,value_share_pct,avg_amount_paid
+1) Paid in full,23676,32.0,19.4,100.83
+2) 2-3 installments,22345,30.2,24.6,135.32
+3) 4-6 installments,15920,21.5,23.6,182.19
+4) 7-10 installments,11612,15.7,31.5,333.8
+5) 11+ installments,336,0.5,1.0,362.25

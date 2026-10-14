@@ -1,121 +1,169 @@
 -- =============================================================================
 -- 02  CLEAN REPORTING TABLES
--- Fixes the issues found in 01_data_quality.sql and adds the business rules
--- (revenue, service level) in one place, so every report uses the same logic.
--- Business rules are documented in docs/metric_definitions.md.
+-- Fixes the issues found in 01_data_quality.sql and puts every business rule
+-- in one place, so Excel, the notebook and the dashboard all agree.
+-- Rules are documented in docs/metric_definitions.md.
+-- Snowflake notes: julianday(b) - julianday(a)  ->  DATEDIFF('hour', a, b) / 24.0
 -- =============================================================================
 
-DROP TABLE IF EXISTS merchants;
-CREATE TABLE merchants AS
-WITH ranked AS (
-    -- duplicates can differ slightly (e.g. one copy is missing the province),
-    -- so keep the most complete copy of each merchant
-    SELECT *,
-           ROW_NUMBER() OVER (
-               PARTITION BY merchant_id
-               ORDER BY (province IS NULL OR TRIM(province) = '')   -- complete rows first
-           ) AS rn
-    FROM raw_merchants
+-- ---------------------------------------------------------------------------
+-- Orders: one row per order, with payment, delivery and review facts attached
+-- ---------------------------------------------------------------------------
+DROP TABLE IF EXISTS order_payment_summary;
+CREATE TABLE order_payment_summary AS
+WITH valid AS (
+    SELECT * FROM raw_order_payments
+    WHERE payment_type <> 'not_defined' AND payment_value > 0 AND payment_installments >= 1
+),
+ranked AS (
+    -- the payment method that paid the most of the order is its "main" method
+    SELECT order_id, payment_type, payment_installments,
+           ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY payment_value DESC, payment_sequential) AS rn
+    FROM valid
 )
 SELECT
-    merchant_id,
-    DATE(application_date)                         AS application_date,
-    sales_channel,
-    CASE
-        WHEN LOWER(TRIM(industry)) IN ('restaurant', 'restaurants') THEN 'Restaurants'
-        WHEN LOWER(TRIM(industry)) = 'e-commerce'                   THEN 'E-commerce'
-        ELSE TRIM(industry)
-    END                                            AS industry,
-    COALESCE(NULLIF(TRIM(province), ''), 'Unknown') AS province,
-    product,
-    pricing_plan,
-    application_status,
-    DATE(decision_date)                            AS decision_date,
-    DATE(first_transaction_date)                   AS first_transaction_date,
-    DATE(closed_date)                              AS closed_date,
-    -- onboarding timings (Snowflake: DATEDIFF('day', a, b))
-    CAST(julianday(decision_date) - julianday(application_date) AS INTEGER)          AS days_to_decision,
-    CAST(julianday(first_transaction_date) - julianday(decision_date) AS INTEGER)    AS days_to_first_txn,
-    SUBSTR(application_date, 1, 7)                 AS application_month,
-    SUBSTR(first_transaction_date, 1, 7)           AS activation_month,
-    SUBSTR(closed_date, 1, 7)                      AS closed_month
-FROM ranked
+    v.order_id,
+    r.payment_type                       AS main_payment_type,
+    r.payment_installments               AS installments,
+    SUM(v.payment_value)                 AS amount_paid,
+    COUNT(*)                             AS payment_rows,
+    MAX(CASE WHEN v.payment_type = 'voucher' THEN 1 ELSE 0 END) AS used_voucher
+FROM valid v
+JOIN ranked r ON r.order_id = v.order_id AND r.rn = 1
+GROUP BY v.order_id;
+
+
+DROP TABLE IF EXISTS order_reviews;
+CREATE TABLE order_reviews AS
+SELECT order_id, review_score
+FROM (
+    SELECT order_id, review_score,
+           ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY review_answer_timestamp DESC) AS rn
+    FROM raw_order_reviews
+)
 WHERE rn = 1;
 
 
-DROP TABLE IF EXISTS monthly_volume;
-CREATE TABLE monthly_volume AS
-WITH deduped AS (
-    SELECT DISTINCT * FROM raw_monthly_volume
+DROP TABLE IF EXISTS orders;
+CREATE TABLE orders AS
+WITH items AS (
+    SELECT order_id,
+           COUNT(*)                 AS item_count,
+           SUM(price)               AS merchandise_value,
+           SUM(freight_value)       AS freight_value,
+           MIN(shipping_limit_date) AS shipping_limit_date,
+           COUNT(DISTINCT seller_id) AS seller_count
+    FROM raw_order_items
+    GROUP BY order_id
 )
 SELECT
-    v.merchant_id,
-    v.month,
-    v.card_type,
-    v.attempted_txns,
-    v.approved_txns,
-    v.approved_volume,
-    v.refund_volume,
-    v.chargeback_count,
-    -- net revenue rule: margin kept on approved volume, by pricing plan and card type
-    ROUND(v.approved_volume *
-        CASE
-            WHEN v.card_type = 'Amex'                                      THEN 0.0025
-            WHEN m.pricing_plan = 'Flat Rate'        AND v.card_type = 'Interac Debit' THEN 0.0040
-            WHEN m.pricing_plan = 'Flat Rate'                              THEN 0.0085
-            WHEN m.pricing_plan = 'Interchange Plus' AND v.card_type = 'Interac Debit' THEN 0.0015
-            ELSE 0.0030
-        END, 2)                                    AS processing_revenue
-FROM deduped v
-JOIN merchants m USING (merchant_id);
+    o.order_id,
+    c.customer_unique_id,
+    c.customer_state,
+    o.order_status,
+    o.order_purchase_timestamp                                         AS purchased_at,
+    SUBSTR(o.order_purchase_timestamp, 1, 7)                           AS order_month,
+    CASE WHEN SUBSTR(o.order_purchase_timestamp, 1, 7) BETWEEN '2017-01' AND '2018-08'
+         THEN 1 ELSE 0 END                                             AS in_period,
+    CASE WHEN o.order_status IN ('canceled', 'unavailable') THEN 1 ELSE 0 END AS is_canceled,
+    i.item_count,
+    i.merchandise_value,
+    i.freight_value,
+    p.main_payment_type,
+    p.installments,
+    p.amount_paid,
+    p.used_voucher,
+    -- hours from purchase to payment approval
+    ROUND((julianday(o.order_approved_at) - julianday(o.order_purchase_timestamp)) * 24, 2) AS approval_hours,
+    -- did the seller hand the parcel to the carrier by the promised shipping date?
+    CASE WHEN o.order_delivered_carrier_date IS NULL OR i.shipping_limit_date IS NULL THEN NULL
+         WHEN o.order_delivered_carrier_date <= i.shipping_limit_date THEN 1 ELSE 0 END AS seller_shipped_on_time,
+    -- delivery: only delivered orders with a delivery date
+    CASE WHEN o.order_status = 'delivered' AND o.order_delivered_customer_date IS NOT NULL
+         THEN ROUND(julianday(o.order_delivered_customer_date) - julianday(o.order_purchase_timestamp), 1) END AS delivery_days,
+    CASE WHEN o.order_status = 'delivered' AND o.order_delivered_customer_date IS NOT NULL
+         THEN CASE WHEN DATE(o.order_delivered_customer_date) <= DATE(o.order_estimated_delivery_date) THEN 1 ELSE 0 END
+    END                                                                AS delivered_on_time,
+    r.review_score
+FROM raw_orders o
+JOIN raw_customers c USING (customer_id)
+LEFT JOIN items i USING (order_id)
+LEFT JOIN order_payment_summary p USING (order_id)
+LEFT JOIN order_reviews r USING (order_id);
 
 
--- one row per merchant per active month, with the monthly platform fee
-DROP TABLE IF EXISTS merchant_months;
-CREATE TABLE merchant_months AS
+-- ---------------------------------------------------------------------------
+-- Order items: one row per item, with seller and English category
+-- ---------------------------------------------------------------------------
+DROP TABLE IF EXISTS order_items;
+CREATE TABLE order_items AS
 SELECT
-    v.merchant_id,
-    v.month,
-    m.sales_channel,
-    m.industry,
-    m.product,
-    m.pricing_plan,
-    m.province,
-    SUM(v.attempted_txns)      AS attempted_txns,
-    SUM(v.approved_txns)       AS approved_txns,
-    SUM(v.approved_volume)     AS approved_volume,
-    SUM(v.refund_volume)       AS refund_volume,
-    SUM(v.chargeback_count)    AS chargeback_count,
-    SUM(CASE WHEN v.card_type <> 'Interac Debit' THEN v.approved_txns ELSE 0 END) AS credit_txns,
-    SUM(v.processing_revenue)  AS processing_revenue,
-    CASE m.product
-        WHEN 'Countertop Terminal' THEN 25
-        WHEN 'Mobile POS'          THEN 15
-        WHEN 'Online Gateway'      THEN 20
-    END                        AS platform_fee
-FROM monthly_volume v
-JOIN merchants m USING (merchant_id)
-GROUP BY v.merchant_id, v.month;
+    i.order_id,
+    i.seller_id,
+    i.product_id,
+    COALESCE(t.product_category_name_english,
+             CASE p.product_category_name
+                 WHEN 'pc_gamer' THEN 'pc_gamer'
+                 WHEN 'portateis_cozinha_e_preparadores_de_alimentos' THEN 'portable_kitchen_appliances'
+             END,
+             'unknown')                       AS category,
+    i.price,
+    i.freight_value,
+    o.order_month,
+    o.in_period,
+    o.is_canceled,
+    o.purchased_at
+FROM raw_order_items i
+JOIN orders o USING (order_id)
+LEFT JOIN raw_products p USING (product_id)
+LEFT JOIN raw_category_translation t USING (product_category_name);
 
 
-DROP TABLE IF EXISTS support_tickets;
-CREATE TABLE support_tickets AS
-SELECT DISTINCT
-    t.ticket_id,
-    t.merchant_id,
-    t.opened_at,
-    t.resolved_at,
-    SUBSTR(t.opened_at, 1, 7)   AS opened_month,
-    t.category,
-    t.contact_channel,
-    t.csat_score,
-    m.product,
-    -- Snowflake: DATEDIFF('minute', opened_at, resolved_at) / 60.0
-    ROUND((julianday(t.resolved_at) - julianday(t.opened_at)) * 24, 1) AS resolution_hours,
-    CASE
-        WHEN t.resolved_at IS NULL           THEN 'Open'
-        WHEN t.resolved_at < t.opened_at     THEN 'Invalid timestamp'
-        ELSE 'Resolved'
-    END                                       AS ticket_status
-FROM raw_support_tickets t
-LEFT JOIN merchants m USING (merchant_id);
+-- ---------------------------------------------------------------------------
+-- Sellers (the marketplace's merchants)
+-- ---------------------------------------------------------------------------
+DROP TABLE IF EXISTS sellers;
+CREATE TABLE sellers AS
+SELECT
+    s.seller_id,
+    s.seller_state,
+    MIN(i.purchased_at)                           AS first_sale_at,
+    SUBSTR(MIN(i.purchased_at), 1, 7)             AS first_sale_month,
+    SUM(CASE WHEN i.is_canceled = 0 THEN i.price ELSE 0 END) AS lifetime_gmv
+FROM raw_sellers s
+LEFT JOIN order_items i USING (seller_id)
+GROUP BY s.seller_id, s.seller_state;
+
+
+-- ---------------------------------------------------------------------------
+-- Seller acquisition funnel: marketing leads -> closed deals -> first sale
+-- ---------------------------------------------------------------------------
+DROP TABLE IF EXISTS seller_leads;
+CREATE TABLE seller_leads AS
+SELECT
+    l.mql_id,
+    DATE(l.first_contact_date)                       AS first_contact_date,
+    SUBSTR(l.first_contact_date, 1, 7)               AS lead_month,
+    COALESCE(l.origin, 'unknown')                    AS origin,
+    CASE WHEN d.mql_id IS NOT NULL THEN 1 ELSE 0 END AS won,
+    DATE(d.won_date)                                 AS won_date,
+    CASE WHEN DATE(d.won_date) >= DATE(l.first_contact_date)      -- 1 deal is dated before its lead
+         THEN CAST(julianday(DATE(d.won_date)) - julianday(DATE(l.first_contact_date)) AS INTEGER)
+    END                                              AS days_to_close,
+    d.seller_id,
+    d.business_segment,
+    d.lead_type,
+    d.business_type,
+    s.first_sale_at,
+    CAST(julianday(DATE(s.first_sale_at)) - julianday(DATE(d.won_date)) AS INTEGER)      AS days_won_to_first_sale,
+    COALESCE(s.lifetime_gmv, 0)                      AS lifetime_gmv
+FROM raw_marketing_qualified_leads l
+LEFT JOIN raw_closed_deals d USING (mql_id)
+LEFT JOIN sellers s ON s.seller_id = d.seller_id;
+
+
+-- indexes for the scorecard queries (not needed in Snowflake)
+CREATE INDEX ix_o_id     ON orders(order_id);
+CREATE INDEX ix_o_month  ON orders(order_month);
+CREATE INDEX ix_oi_order ON order_items(order_id);
+CREATE INDEX ix_oi_sell  ON order_items(seller_id, order_month);

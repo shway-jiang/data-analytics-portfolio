@@ -2,74 +2,71 @@
 
 Every report in this project uses these definitions. The logic lives in one place, [`sql/02_clean_tables.sql`](../sql/02_clean_tables.sql), so a metric can't mean one thing in Excel and another on the dashboard.
 
-## Data sources
+**Reporting period:** January 2017 – August 2018. The few orders from Sept–Dec 2016 and Sept–Oct 2018 are partial months at the edges of the data extract and are left out of trends. **Currency:** Brazilian reais (R$).
 
-| Table | Grain | Key fields |
-|---|---|---|
-| `merchants` | One row per merchant application | sales channel, industry, province, product, pricing plan, application / decision / first-transaction / closed dates |
-| `monthly_volume` | One row per merchant × month × card type | attempted and approved transactions, approved volume, refunds, chargebacks |
-| `support_tickets` | One row per support ticket | category, contact channel, opened and resolved time, CSAT score |
-
-All data is **simulated** (see [`python/generate_data.py`](../python/generate_data.py)).
-
-## Volume and revenue
+## Sales
 
 | Metric | Definition |
 |---|---|
-| **Active merchant** | A merchant with at least one approved transaction in the month. |
-| **Approved volume** | Dollar value of approved card transactions, before refunds. |
-| **Approval rate** | Approved transactions ÷ attempted transactions. |
-| **Average ticket** | Approved volume ÷ approved transactions. |
-| **Net revenue** | Processing revenue + platform fees (below). |
-| **Processing revenue** | Approved volume × the margin kept for that pricing plan and card type. |
-| **Platform fee** | Monthly fee for each active merchant: $25 countertop terminal, $15 mobile POS, $20 online gateway. |
-| **Revenue per active merchant** | Net revenue ÷ active merchants in the month. |
+| **Orders** | All orders placed in the month, including canceled ones. |
+| **Canceled orders** | Orders with status `canceled` or `unavailable`. |
+| **GMV** (gross merchandise value) | Sum of item prices on orders that weren't canceled. Freight is excluded. |
+| **Average order value** | GMV ÷ orders with items that weren't canceled. |
 
-**Margin assumptions** (share of approved volume kept after interchange and network fees):
-
-| Card type | Flat Rate plan | Interchange Plus plan |
-|---|---|---|
-| Visa / Mastercard | 0.85% | 0.30% |
-| Interac Debit | 0.40% | 0.15% |
-| Amex | 0.25% | 0.25% |
-
-## Risk
+## Payments
 
 | Metric | Definition |
 |---|---|
-| **Chargeback rate** | Chargebacks ÷ approved credit-card transactions. Interac Debit is excluded because debit has no chargebacks. |
+| **Main payment method** | Some orders are split across methods (e.g. card + voucher). The method that paid the largest share is the order's main method. |
+| **Share of value** | Amount paid with that main method ÷ total amount paid (orders not canceled). |
+| **Hours to approve** | Hours from purchase to payment approval; the median is reported because a few orders take weeks. |
+| **Installments** | Number of monthly installments chosen for a credit card payment (1 = paid in full). |
 
-## Onboarding and retention
-
-| Metric | Definition |
-|---|---|
-| **Application approval rate** | Approved applications ÷ all applications. |
-| **Days to decision** | Days from application to approve/decline decision. |
-| **Activated within 30 days** | Approved merchants whose first transaction came within 30 days of approval. Only merchants approved at least 30 days before the end of the data are counted, so recent approvals aren't unfairly marked as "not activated". |
-| **Days to first transaction** | Days from approval to first transaction (median reported). |
-| **Retained 6 months** | Activated merchants whose account was still open 6 months (183 days) after their first transaction. Only merchants activated by December 2025 are counted, so each one has had 6 months to be measured. |
-| **New merchants** | Merchants whose first transaction falls in the month. |
-| **Closed merchants** | Merchants whose account closed in the month. |
-
-## Service
+## Sellers (the marketplace's merchants)
 
 | Metric | Definition |
 |---|---|
-| **Resolution hours** | Hours from ticket opened to ticket resolved. |
-| **Within 48h SLA** | Share of resolved tickets closed within 48 hours. |
-| **CSAT** | Average score (1–5) from merchants who answered the post-ticket survey (about 40% respond). |
-| **Slow ticket** | A ticket that took more than 48 hours to resolve. |
-| **Closed within 3 months** | For each merchant-month, whether the account closed in that month or the next 3. Only months up to March 2026 are used so every row has a full 3 months of follow-up. |
+| **Active seller** | A seller with at least one item sold (not canceled) in the month. |
+| **New seller** | A seller whose first-ever sale falls in the month. |
+| **Seller retention** | Share of last month's active sellers who also sold this month. |
+| **GMV per active seller** | GMV ÷ active sellers. |
+| **Seller concentration** | Sellers ranked by GMV and split into 10 equal groups. |
+
+## Seller onboarding funnel
+
+| Metric | Definition |
+|---|---|
+| **Lead** | A marketing-qualified seller lead, with the channel it came from (organic search, paid search, social…). |
+| **Signed seller** | A lead that became a closed deal. |
+| **Lead to signed** | Signed sellers ÷ leads. |
+| **Days to close** | Days from first contact to deal won (median). One deal dated before its lead is excluded. |
+| **Signed with first sale** | Signed sellers who made at least one sale in the data. Only deals won by 30 June 2018 are counted, so each seller had at least two months to sell. |
+
+## Service and customer experience
+
+| Metric | Definition |
+|---|---|
+| **Seller shipped on time** | The parcel reached the carrier by the seller's shipping deadline. |
+| **Delivered on time** | Delivered on or before the estimated delivery date shown to the customer. Only delivered orders with a delivery date count. |
+| **Delivery days** | Days from purchase to delivery. |
+| **Review score** | Customer review, 1–5 stars. If an order has several reviews, the latest is used. |
+| **Low reviews** | Share of reviews with 1 or 2 stars. |
 
 ## Data-quality rules
 
 Checked by [`sql/01_data_quality.sql`](../sql/01_data_quality.sql) on every refresh.
 
-| Issue | Rule |
-|---|---|
-| Duplicate merchant records | Keep the most complete copy (one with a province). |
-| Missing province | Reported as "Unknown". |
-| Non-standard industry labels (e.g. "Restaurant", "e-commerce ") | Mapped to the approved label. |
-| Duplicate monthly volume rows | Keep one copy. |
-| Ticket resolved before it was opened | Flagged "Invalid timestamp" and left out of all service metrics. |
-| Approved > attempted transactions, negative volume, refunds > volume, unknown merchant, CSAT outside 1–5 | Checked every month; none found in this data. |
+| Issue found | Count | Rule |
+|---|---|---|
+| Orders in partial months | 349 | Left out of monthly trends |
+| Orders with no items (mostly canceled) | 775 | Left out of sales metrics |
+| Order with no payment record | 1 | Left out of payment metrics |
+| Amount paid ≠ item prices + freight | 249 | Kept; sales metrics use item prices, payment metrics use the amount paid |
+| Payment rows with undefined method, R$0 or 0 installments | 11 | Left out of payment metrics |
+| Extra review rows for the same order | 551 | Latest review kept |
+| Delivered orders missing a delivery date | 8 | Left out of delivery metrics |
+| Parcel handed to carrier before payment approval | 1,359 | Kept; timestamps come from different systems |
+| Products with no category | 610 | Reported as "unknown" |
+| Categories with no English name | 2 | Translated in the clean table |
+| Seller leads with no channel | 60 | Reported as "unknown" |
+| Deal won before first contact | 1 | Left out of days-to-close |

@@ -1,11 +1,14 @@
 check_name,failing_rows,action
-Duplicate merchant records,12,Keep one copy
-Merchant missing province,25,"Report as ""Unknown"""
-Industry label not on approved list,25,Map to the standard label
-First transaction before approval,0,Investigate if > 0
-Declined merchant with transactions,0,Investigate if > 0
-Duplicate monthly volume rows,40,Keep one copy
-Volume rows with unknown merchant,0,Investigate if > 0
-Volume rows failing logic checks,0,Investigate if > 0
-Ticket resolved before opened,8,Exclude from service-level metrics
-CSAT score outside 1-5,0,Exclude from CSAT
+Orders in partial months (outside Jan 2017 - Aug 2018),349,Excluded from monthly trends
+Orders with no items,775,Excluded from sales metrics (mostly canceled)
+Orders with no payment record,1,Excluded from payment metrics
+Amount paid differs from items + freight,249,"Kept; sales use item prices, payments use amount paid"
+"Payment rows: undefined type, R$0 or 0 installments",11,Excluded from payment-method metrics
+Extra review rows for the same order,551,Keep the latest review per order
+Delivered orders missing delivery date,8,Excluded from delivery metrics
+Handed to carrier before payment approved,1359,Kept; timestamps come from different systems
+Products with no category,610,"Reported as ""unknown"""
+Categories missing an English name,2,Translated in the clean table
+Seller leads with no origin channel,60,"Reported as ""unknown"""
+Closed deals with no matching lead,0,Investigate if > 0
+Deals won before first contact,1,Excluded from days-to-close

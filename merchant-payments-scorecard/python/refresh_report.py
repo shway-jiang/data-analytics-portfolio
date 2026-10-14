@@ -28,9 +28,43 @@ OUT = ROOT / "outputs"
 DASH = ROOT / "dashboard"
 
 
+RAW_FILES = {
+    "orders": "olist_orders_dataset.csv",
+    "order_items": "olist_order_items_dataset.csv",
+    "order_payments": "olist_order_payments_dataset.csv",
+    "order_reviews": "olist_order_reviews_dataset.csv",
+    "customers": "olist_customers_dataset.csv",
+    "sellers": "olist_sellers_dataset.csv",
+    "products": "olist_products_dataset.csv",
+    "category_translation": "product_category_name_translation.csv",
+    "marketing_qualified_leads": "olist_marketing_qualified_leads_dataset.csv",
+    "closed_deals": "olist_closed_deals_dataset.csv",
+}
+
+
 def load_raw(con: sqlite3.Connection) -> None:
-    for name in ["merchants", "monthly_volume", "support_tickets"]:
-        pd.read_csv(RAW / f"{name}.csv").to_sql(f"raw_{name}", con, index=False, if_exists="replace")
+    missing = [f for f in RAW_FILES.values() if not (RAW / f).exists()]
+    if missing:
+        raise FileNotFoundError(f"Download the Olist files into data/raw/ first (see data/README.md). Missing: {missing}")
+    for table, file in RAW_FILES.items():
+        df = pd.read_csv(RAW / file)
+        if table == "order_reviews":   # free-text comments aren't used; skip them to save memory
+            df = df.drop(columns=["review_comment_title", "review_comment_message"])
+        df.to_sql(f"raw_{table}", con, index=False, if_exists="replace")
+    # indexes on the join keys (Snowflake doesn't need these)
+    con.executescript("""
+        CREATE INDEX ix_items_order    ON raw_order_items(order_id);
+        CREATE INDEX ix_items_seller   ON raw_order_items(seller_id);
+        CREATE INDEX ix_items_product  ON raw_order_items(product_id);
+        CREATE INDEX ix_pay_order      ON raw_order_payments(order_id);
+        CREATE INDEX ix_rev_order      ON raw_order_reviews(order_id);
+        CREATE INDEX ix_orders_id      ON raw_orders(order_id);
+        CREATE INDEX ix_cust_id        ON raw_customers(customer_id);
+        CREATE INDEX ix_prod_id        ON raw_products(product_id);
+        CREATE INDEX ix_cat_name       ON raw_category_translation(product_category_name);
+        CREATE INDEX ix_mql_id         ON raw_marketing_qualified_leads(mql_id);
+        CREATE INDEX ix_deal_mql       ON raw_closed_deals(mql_id);
+    """)
 
 
 def named_queries(path: Path) -> dict:

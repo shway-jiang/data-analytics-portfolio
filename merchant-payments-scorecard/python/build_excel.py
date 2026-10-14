@@ -25,26 +25,28 @@ HEAD_FILL = PatternFill("solid", fgColor=NAVY)
 # column name in monthly_scorecard -> (label, number format, higher is better?)
 MONTHLY_COLS = {
     "month": ("Month", "@", None),
-    "active_merchants": ("Active merchants", "#,##0", True),
-    "new_merchants": ("New merchants", "#,##0", True),
-    "closed_merchants": ("Closed merchants", "#,##0", False),
-    "approved_volume": ("Approved volume ($)", "$#,##0", True),
-    "volume_mom_pct": ("Volume MoM %", '0.0"%"', True),
-    "approved_txns": ("Approved transactions", "#,##0", True),
-    "avg_ticket": ("Average ticket ($)", "$#,##0.00", True),
-    "approval_rate_pct": ("Approval rate %", '0.00"%"', True),
-    "net_revenue": ("Net revenue ($)", "$#,##0", True),
-    "revenue_mom_pct": ("Revenue MoM %", '0.0"%"', True),
-    "revenue_per_merchant": ("Revenue per active merchant ($)", "$#,##0.00", True),
-    "chargeback_rate_pct": ("Chargeback rate %", '0.000"%"', False),
-    "resolved_tickets": ("Resolved support tickets", "#,##0", False),
-    "pct_within_48h_sla": ("Tickets within 48h SLA %", '0.0"%"', True),
-    "avg_csat": ("Average CSAT (1-5)", "0.00", True),
+    "orders": ("Orders", "#,##0", True),
+    "canceled_pct": ("Canceled orders %", '0.00"%"', False),
+    "gmv": ("GMV (R$)", '"R$"#,##0', True),
+    "gmv_mom_pct": ("GMV MoM %", '0.0"%"', True),
+    "avg_order_value": ("Average order value (R$)", '"R$"#,##0.00', True),
+    "active_sellers": ("Active sellers", "#,##0", True),
+    "new_sellers": ("New sellers (first sale)", "#,##0", True),
+    "seller_retention_pct": ("Last month's sellers who sold again %", '0.0"%"', True),
+    "gmv_per_active_seller": ("GMV per active seller (R$)", '"R$"#,##0', True),
+    "credit_card_share_pct": ("Paid by credit card % (of value)", '0.0"%"', None),
+    "avg_card_installments": ("Average card installments", "0.00", None),
+    "seller_shipped_on_time_pct": ("Seller shipped on time %", '0.0"%"', True),
+    "delivered_on_time_pct": ("Delivered on time %", '0.0"%"', True),
+    "avg_delivery_days": ("Average delivery days", "0.0", False),
+    "avg_review_score": ("Average review score (1-5)", "0.00", True),
+    "low_review_pct": ("1-2 star reviews %", '0.0"%"', False),
 }
 
-SCORECARD_KPIS = ["approved_volume", "net_revenue", "active_merchants", "new_merchants",
-                  "closed_merchants", "approval_rate_pct", "avg_ticket", "revenue_per_merchant",
-                  "chargeback_rate_pct", "pct_within_48h_sla", "avg_csat"]
+SCORECARD_KPIS = ["gmv", "orders", "avg_order_value", "canceled_pct", "active_sellers", "new_sellers",
+                  "seller_retention_pct", "gmv_per_active_seller", "credit_card_share_pct",
+                  "avg_card_installments", "seller_shipped_on_time_pct", "delivered_on_time_pct",
+                  "avg_delivery_days", "avg_review_score", "low_review_pct"]
 
 
 def _table(ws, df, start_row=1, formats=None, labels=None):
@@ -90,7 +92,7 @@ def build_excel(r: dict, path: Path) -> None:
     ws.sheet_view.showGridLines = False
     ws["B2"] = "Merchant Payments Scorecard"
     ws["B2"].font = Font(bold=True, size=16, color=NAVY)
-    ws["B3"] = "Simulated data for a fictional Canadian merchant acquirer. Pick a month in C4 and the page updates."
+    ws["B3"] = "Olist marketplace (Brazil), Jan 2017 - Aug 2018, amounts in R$. Pick a month in C4 and the page updates."
     ws["B3"].font = Font(italic=True, color="666666")
     ws["B4"] = "Month:"
     ws["B4"].font = Font(bold=True)
@@ -121,6 +123,8 @@ def build_excel(r: dict, path: Path) -> None:
         ws.cell(i, 7, f'=IF(F{i}="","",IFERROR(C{i}/F{i}-1,""))').number_format = "+0.0%;-0.0%;0.0%"
         for j in range(2, 8):
             ws.cell(i, j).border = Border(bottom=thin)
+        if higher_better is None:   # mix metrics: neither direction is "good"
+            continue
         # green when the change is good for the business, red when it's bad
         good, bad = ("greaterThan", "lessThan") if higher_better else ("lessThan", "greaterThan")
         for col in ("E", "G"):
@@ -128,37 +132,44 @@ def build_excel(r: dict, path: Path) -> None:
             ws.conditional_formatting.add(f"{col}{i}", CellIsRule(operator=bad, formula=["-0.0001"] if bad == "lessThan" else ["0.0001"], font=Font(color=RED_TXT, bold=True)))
 
     note_row = 7 + len(SCORECARD_KPIS) + 1
-    ws.cell(note_row, 2, "Green = better for the business, red = worse. Metric definitions are on the 'Definitions' sheet.").font = Font(italic=True, color="666666")
+    ws.cell(note_row, 2, "Green = better for the business, red = worse, no colour = mix metric. Definitions are on the 'Definitions' sheet.").font = Font(italic=True, color="666666")
     for col, w in zip("ABCDEFG", [2, 34, 16, 14, 12, 20, 15]):
         ws.column_dimensions[col].width = w
 
     # ---- Supporting tables
-    for name, title in [("onboarding_by_channel", "Channels"),
-                        ("activation_speed_vs_retention", "Activation Speed"),
-                        ("industry_performance", "Industries"),
-                        ("product_performance", "Products"),
-                        ("card_type_mix", "Card Mix"),
-                        ("service_levels_by_category", "Service Levels"),
-                        ("slow_ticket_vs_churn", "Slow Tickets vs Churn"),
+    for name, title in [("payment_methods", "Payment Methods"),
+                        ("card_installments", "Card Installments"),
+                        ("seller_funnel_by_channel", "Seller Funnel"),
+                        ("seller_activation_by_type", "Seller Activation"),
+                        ("seller_concentration", "Seller Concentration"),
+                        ("delivery_vs_review", "Delivery vs Reviews"),
+                        ("late_delivery_cause", "Late Delivery Cause"),
+                        ("category_performance", "Categories"),
+                        ("delivery_by_state", "States"),
                         ("data_quality_checks", "Data Quality")]:
         df = r[name]
         fmts = _pct_fmt(df)
-        fmts.update({c: "$#,##0" for c in df.columns if c in ("approved_volume", "net_revenue")})
-        fmts.update({c: "$#,##0.00" for c in df.columns if "revenue_per" in c or c == "avg_ticket"})
+        fmts.update({c: '"R$"#,##0' for c in df.columns if c in ("gmv", "gmv_per_signed_seller")})
+        fmts.update({c: '"R$"#,##0.00' for c in df.columns if c in ("avg_amount_paid", "avg_item_price")})
         _table(wb.create_sheet(title), df, formats=fmts)
 
     # ---- Definitions
     d = wb.create_sheet("Definitions")
     defs = [
-        ("Active merchant", "A merchant with at least one approved transaction in the month."),
-        ("Approved volume", "Dollar value of approved card transactions (before refunds)."),
-        ("Approval rate", "Approved transactions ÷ attempted transactions."),
-        ("Net revenue", "Processing margin (rate by pricing plan and card type) + monthly platform fee per active merchant."),
-        ("Chargeback rate", "Chargebacks ÷ approved credit-card transactions (debit excluded)."),
-        ("Within 48h SLA", "Share of resolved tickets closed within 48 hours of opening. Tickets with invalid timestamps are excluded."),
-        ("CSAT", "Average 1-5 survey score from merchants who answered the post-ticket survey."),
-        ("Activated within 30 days", "Approved merchants whose first transaction came within 30 days of approval."),
-        ("Retained 6 months", "Activated merchants whose account was still open 6 months after their first transaction."),
+        ("GMV", "Gross merchandise value: item prices of orders that weren't canceled (freight excluded)."),
+        ("Orders", "All orders placed in the month, including canceled ones."),
+        ("Canceled orders", "Orders with status 'canceled' or 'unavailable'."),
+        ("Average order value", "GMV / orders with items that weren't canceled."),
+        ("Active seller", "A seller with at least one item sold (not canceled) in the month."),
+        ("New seller", "A seller whose first-ever sale falls in the month."),
+        ("Seller retention", "Share of last month's active sellers who also sold this month."),
+        ("Main payment method", "The method that paid the largest part of the order."),
+        ("Hours to approve", "Hours from purchase to payment approval (median)."),
+        ("Seller shipped on time", "Parcel handed to the carrier by the seller's shipping deadline."),
+        ("Delivered on time", "Delivered on or before the estimated delivery date shown to the customer."),
+        ("Review score", "Customer review (1-5 stars); latest review per order."),
+        ("Lead to signed", "Marketing-qualified seller leads that became signed sellers (closed deals)."),
+        ("Signed with first sale", "Signed sellers (won by 30 Jun 2018) who made at least one sale in the data."),
     ]
     _table(d, pd.DataFrame(defs, columns=["metric", "definition"]))
     d.column_dimensions["A"].width = 26

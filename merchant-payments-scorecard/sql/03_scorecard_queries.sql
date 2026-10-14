@@ -2,247 +2,275 @@
 -- 03  SCORECARD QUERIES
 -- Each query starts with "-- name: <name>". The refresh script runs them in
 -- order and saves each result to outputs/<name>.csv.
--- Reporting period: Jan 2025 - Jun 2026. Metric rules: docs/metric_definitions.md
+-- Reporting period: Jan 2017 - Aug 2018 (full months only). Amounts in R$.
+-- Metric rules: docs/metric_definitions.md
 -- =============================================================================
 
 
 -- name: monthly_scorecard
 -- One row per month for the leadership scorecard, with month-over-month change.
-WITH volume AS (
+WITH sales AS (
     SELECT
-        month,
-        COUNT(DISTINCT CASE WHEN approved_txns > 0 THEN merchant_id END) AS active_merchants,
-        SUM(attempted_txns)                       AS attempted_txns,
-        SUM(approved_txns)                        AS approved_txns,
-        SUM(approved_volume)                      AS approved_volume,
-        SUM(refund_volume)                        AS refund_volume,
-        SUM(chargeback_count)                     AS chargebacks,
-        SUM(credit_txns)                          AS credit_txns,
-        SUM(processing_revenue + platform_fee)    AS net_revenue
-    FROM merchant_months
-    GROUP BY month
+        order_month AS month,
+        COUNT(*)                                                       AS orders,
+        ROUND(100.0 * AVG(is_canceled), 2)                             AS canceled_pct,
+        SUM(CASE WHEN is_canceled = 0 THEN merchandise_value END)      AS gmv,
+        SUM(CASE WHEN is_canceled = 0 AND merchandise_value IS NOT NULL THEN 1 ELSE 0 END) AS paid_orders,
+        SUM(CASE WHEN is_canceled = 0 AND main_payment_type = 'credit_card' THEN amount_paid END)
+            / SUM(CASE WHEN is_canceled = 0 THEN amount_paid END)      AS credit_card_share,
+        AVG(CASE WHEN is_canceled = 0 AND main_payment_type = 'credit_card' THEN installments END) AS avg_card_installments,
+        AVG(delivered_on_time)                                         AS on_time,
+        AVG(delivery_days)                                             AS delivery_days,
+        AVG(seller_shipped_on_time)                                    AS seller_on_time,
+        AVG(review_score)                                              AS avg_review,
+        AVG(CASE WHEN review_score IS NOT NULL THEN (review_score <= 2) END) AS low_review
+    FROM orders
+    WHERE in_period = 1
+    GROUP BY order_month
 ),
-activations AS (
-    SELECT activation_month AS month, COUNT(*) AS new_merchants
-    FROM merchants WHERE activation_month IS NOT NULL GROUP BY activation_month
+seller_months AS (
+    SELECT DISTINCT seller_id, order_month AS month
+    FROM order_items
+    WHERE in_period = 1 AND is_canceled = 0
 ),
-closures AS (
-    SELECT closed_month AS month, COUNT(*) AS closed_merchants
-    FROM merchants WHERE closed_month IS NOT NULL GROUP BY closed_month
-),
-service AS (
+seller_activity AS (
+    -- active sellers, and how many of last month's active sellers sold again this month
     SELECT
-        opened_month AS month,
-        COUNT(*)                                                         AS tickets,
-        AVG(CASE WHEN resolution_hours <= 48 THEN 1.0 ELSE 0.0 END)      AS pct_within_sla,
-        AVG(csat_score)                                                  AS avg_csat
-    FROM support_tickets
-    WHERE ticket_status = 'Resolved'
-    GROUP BY opened_month
+        cur.month,
+        COUNT(*)                                              AS active_sellers,
+        SUM(CASE WHEN prev.seller_id IS NOT NULL THEN 1 ELSE 0 END) AS repeat_from_last_month
+    FROM seller_months cur
+    LEFT JOIN seller_months prev
+           ON prev.seller_id = cur.seller_id
+          AND prev.month = SUBSTR(DATE(cur.month || '-01', '-1 month'), 1, 7)
+    GROUP BY cur.month
+),
+new_sellers AS (
+    SELECT first_sale_month AS month, COUNT(*) AS new_sellers FROM sellers GROUP BY first_sale_month
 )
 SELECT
-    v.month,
-    v.active_merchants,
-    COALESCE(a.new_merchants, 0)                           AS new_merchants,
-    COALESCE(c.closed_merchants, 0)                        AS closed_merchants,
-    ROUND(v.approved_volume, 0)                            AS approved_volume,
-    ROUND(100.0 * (v.approved_volume / LAG(v.approved_volume) OVER (ORDER BY v.month) - 1), 1) AS volume_mom_pct,
-    v.approved_txns,
-    ROUND(v.approved_volume / v.approved_txns, 2)          AS avg_ticket,
-    ROUND(100.0 * v.approved_txns / v.attempted_txns, 2)   AS approval_rate_pct,
-    ROUND(v.net_revenue, 0)                                AS net_revenue,
-    ROUND(100.0 * (v.net_revenue / LAG(v.net_revenue) OVER (ORDER BY v.month) - 1), 1)         AS revenue_mom_pct,
-    ROUND(v.net_revenue / v.active_merchants, 2)           AS revenue_per_merchant,
-    ROUND(100.0 * v.chargebacks / v.credit_txns, 3)        AS chargeback_rate_pct,
-    COALESCE(s.tickets, 0)                                 AS resolved_tickets,
-    ROUND(100.0 * s.pct_within_sla, 1)                     AS pct_within_48h_sla,
-    ROUND(s.avg_csat, 2)                                   AS avg_csat
-FROM volume v
-LEFT JOIN activations a USING (month)
-LEFT JOIN closures   c USING (month)
-LEFT JOIN service    s USING (month)
-ORDER BY v.month;
+    s.month,
+    s.orders,
+    s.canceled_pct,
+    ROUND(s.gmv, 0)                                                    AS gmv,
+    ROUND(100.0 * (s.gmv / LAG(s.gmv) OVER (ORDER BY s.month) - 1), 1) AS gmv_mom_pct,
+    ROUND(s.gmv / s.paid_orders, 2)                                    AS avg_order_value,
+    a.active_sellers,
+    COALESCE(n.new_sellers, 0)                                         AS new_sellers,
+    ROUND(100.0 * a.repeat_from_last_month / LAG(a.active_sellers) OVER (ORDER BY s.month), 1) AS seller_retention_pct,
+    ROUND(s.gmv / a.active_sellers, 0)                                 AS gmv_per_active_seller,
+    ROUND(100.0 * s.credit_card_share, 1)                              AS credit_card_share_pct,
+    ROUND(s.avg_card_installments, 2)                                  AS avg_card_installments,
+    ROUND(100.0 * s.seller_on_time, 1)                                 AS seller_shipped_on_time_pct,
+    ROUND(100.0 * s.on_time, 1)                                        AS delivered_on_time_pct,
+    ROUND(s.delivery_days, 1)                                          AS avg_delivery_days,
+    ROUND(s.avg_review, 2)                                             AS avg_review_score,
+    ROUND(100.0 * s.low_review, 1)                                     AS low_review_pct
+FROM sales s
+JOIN seller_activity a USING (month)
+LEFT JOIN new_sellers n USING (month)
+ORDER BY s.month;
 
 
--- name: onboarding_by_channel
--- How each sales channel performs from application to a retained, paying merchant.
+-- name: payment_methods
+-- How each payment method performs: share of sales, speed of approval, cancellations.
 WITH base AS (
-    SELECT
-        m.*,
-        CASE WHEN application_status = 'Approved' THEN 1 ELSE 0 END                AS is_approved,
-        -- activation is judged only on merchants approved 30+ days before period end
-        CASE WHEN application_status = 'Approved' AND decision_date <= DATE('2026-06-30', '-30 days')
-             THEN 1 ELSE 0 END                                                       AS activation_eligible,
-        CASE WHEN days_to_first_txn <= 30 THEN 1 ELSE 0 END                          AS activated_30d,
-        -- 6-month retention is judged only on merchants active for 6+ months of the period
-        CASE WHEN activation_month <= '2025-12' THEN 1 ELSE 0 END                    AS retention_eligible,
-        CASE WHEN closed_date IS NULL
-               OR julianday(closed_date) - julianday(first_transaction_date) >= 183
-             THEN 1 ELSE 0 END                                                       AS retained_6m
-    FROM merchants m
+    SELECT * FROM orders WHERE in_period = 1 AND main_payment_type IS NOT NULL
 ),
-median_days AS (
-    -- median days from approval to first transaction (Snowflake: MEDIAN())
-    SELECT sales_channel, AVG(days_to_first_txn) AS median_days_to_first_txn
+median_approval AS (
+    -- median hours to approve payment (Snowflake: MEDIAN(approval_hours))
+    SELECT main_payment_type, AVG(approval_hours) AS median_approval_hours
     FROM (
-        SELECT sales_channel, days_to_first_txn,
-               ROW_NUMBER() OVER (PARTITION BY sales_channel ORDER BY days_to_first_txn) AS rn,
-               COUNT(*)     OVER (PARTITION BY sales_channel)                            AS cnt
-        FROM merchants
-        WHERE days_to_first_txn IS NOT NULL
+        SELECT main_payment_type, approval_hours,
+               ROW_NUMBER() OVER (PARTITION BY main_payment_type ORDER BY approval_hours) AS rn,
+               COUNT(*)     OVER (PARTITION BY main_payment_type)                         AS cnt
+        FROM base
+        WHERE approval_hours IS NOT NULL
     )
     WHERE rn IN ((cnt + 1) / 2, (cnt + 2) / 2)
-    GROUP BY sales_channel
+    GROUP BY main_payment_type
 ),
-revenue AS (
-    SELECT sales_channel,
-           AVG(processing_revenue + platform_fee) AS revenue_per_active_month
-    FROM merchant_months
-    GROUP BY sales_channel
+totals AS (
+    SELECT COUNT(*) AS orders, SUM(amount_paid) AS paid FROM base WHERE is_canceled = 0
 )
 SELECT
-    b.sales_channel,
-    COUNT(*)                                                                         AS applications,
-    ROUND(100.0 * AVG(b.is_approved), 1)                                             AS approval_rate_pct,
-    ROUND(AVG(b.days_to_decision), 1)                                                AS avg_days_to_decision,
-    ROUND(100.0 * SUM(b.activated_30d * b.activation_eligible) / SUM(b.activation_eligible), 1) AS activated_within_30d_pct,
-    md.median_days_to_first_txn,
-    ROUND(100.0 * SUM(b.retained_6m * b.retention_eligible)
-              / SUM(CASE WHEN b.retention_eligible = 1 AND b.first_transaction_date IS NOT NULL THEN 1 END), 1)
-                                                                                     AS retained_6m_pct,
-    ROUND(r.revenue_per_active_month, 2)                                             AS revenue_per_active_month
-FROM base b
-JOIN median_days md USING (sales_channel)
-JOIN revenue r USING (sales_channel)
-GROUP BY b.sales_channel
-ORDER BY retained_6m_pct DESC;
+    b.main_payment_type                                                   AS payment_method,
+    SUM(1 - b.is_canceled)                                                AS orders,
+    ROUND(100.0 * SUM(1 - b.is_canceled) / t.orders, 1)                   AS order_share_pct,
+    ROUND(100.0 * SUM(CASE WHEN b.is_canceled = 0 THEN b.amount_paid END) / t.paid, 1) AS value_share_pct,
+    ROUND(AVG(CASE WHEN b.is_canceled = 0 THEN b.amount_paid END), 2)     AS avg_amount_paid,
+    ROUND(m.median_approval_hours, 1)                                     AS median_hours_to_approve,
+    ROUND(100.0 * AVG(b.is_canceled), 2)                                  AS canceled_pct,
+    ROUND(AVG(b.review_score), 2)                                         AS avg_review_score
+FROM base b, totals t
+JOIN median_approval m USING (main_payment_type)
+GROUP BY b.main_payment_type
+ORDER BY orders DESC;
 
 
--- name: activation_speed_vs_retention
--- Do merchants who start processing quickly stay longer?
+-- name: card_installments
+-- Credit card orders split by number of installments (a key card product in Brazil).
 SELECT
     CASE
-        WHEN days_to_first_txn <= 7  THEN '1) 0-7 days'
-        WHEN days_to_first_txn <= 14 THEN '2) 8-14 days'
-        ELSE                              '3) 15+ days'
-    END                                                         AS time_to_first_txn,
-    COUNT(*)                                                    AS merchants,
-    ROUND(100.0 * AVG(CASE WHEN closed_date IS NULL
-                             OR julianday(closed_date) - julianday(first_transaction_date) >= 183
-                           THEN 1.0 ELSE 0.0 END), 1)           AS retained_6m_pct
-FROM merchants
-WHERE first_transaction_date IS NOT NULL
-  AND activation_month <= '2025-12'
+        WHEN installments = 1  THEN '1) Paid in full'
+        WHEN installments <= 3 THEN '2) 2-3 installments'
+        WHEN installments <= 6 THEN '3) 4-6 installments'
+        WHEN installments <= 10 THEN '4) 7-10 installments'
+        ELSE                        '5) 11+ installments'
+    END                                                             AS installment_plan,
+    COUNT(*)                                                        AS orders,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 1)              AS order_share_pct,
+    ROUND(100.0 * SUM(amount_paid) / SUM(SUM(amount_paid)) OVER (), 1) AS value_share_pct,
+    ROUND(AVG(amount_paid), 2)                                      AS avg_amount_paid
+FROM orders
+WHERE in_period = 1 AND is_canceled = 0 AND main_payment_type = 'credit_card'
 GROUP BY 1
 ORDER BY 1;
 
 
--- name: industry_performance
--- Last 6 months (Jan-Jun 2026): which industries drive volume and revenue.
-WITH h1 AS (
-    SELECT * FROM merchant_months WHERE month BETWEEN '2026-01' AND '2026-06'
-),
-totals AS (
-    SELECT SUM(approved_volume) AS vol, SUM(processing_revenue + platform_fee) AS rev FROM h1
+-- name: seller_funnel_by_channel
+-- Seller acquisition: marketing lead -> signed seller -> first sale, by lead channel.
+-- First-sale rate uses only deals won by 30 Jun 2018, so each seller had 2+ months to sell.
+WITH median_close AS (
+    SELECT origin, AVG(days_to_close) AS median_days_to_close
+    FROM (
+        SELECT origin, days_to_close,
+               ROW_NUMBER() OVER (PARTITION BY origin ORDER BY days_to_close) AS rn,
+               COUNT(*)     OVER (PARTITION BY origin)                        AS cnt
+        FROM seller_leads WHERE won = 1 AND days_to_close IS NOT NULL
+    )
+    WHERE rn IN ((cnt + 1) / 2, (cnt + 2) / 2)
+    GROUP BY origin
 )
 SELECT
-    industry,
-    COUNT(DISTINCT merchant_id)                                        AS active_merchants,
-    ROUND(SUM(approved_volume), 0)                                     AS approved_volume,
-    ROUND(100.0 * SUM(approved_volume) / t.vol, 1)                     AS volume_share_pct,
-    ROUND(SUM(processing_revenue + platform_fee), 0)                   AS net_revenue,
-    ROUND(100.0 * SUM(processing_revenue + platform_fee) / t.rev, 1)   AS revenue_share_pct,
-    ROUND(SUM(approved_volume) / SUM(approved_txns), 2)                AS avg_ticket,
-    ROUND(100.0 * SUM(approved_txns) / SUM(attempted_txns), 2)         AS approval_rate_pct,
-    ROUND(100.0 * SUM(chargeback_count) / NULLIF(SUM(credit_txns), 0), 3) AS chargeback_rate_pct,
-    ROUND(SUM(processing_revenue + platform_fee) / COUNT(*), 2)        AS revenue_per_merchant_month
-FROM h1, totals t
-GROUP BY industry
-ORDER BY net_revenue DESC;
+    l.origin                                                         AS lead_channel,
+    COUNT(*)                                                         AS leads,
+    SUM(l.won)                                                       AS signed_sellers,
+    ROUND(100.0 * SUM(l.won) / COUNT(*), 1)                          AS lead_to_signed_pct,
+    m.median_days_to_close,
+    ROUND(100.0 * SUM(CASE WHEN l.won_date <= '2018-06-30' AND l.first_sale_at IS NOT NULL THEN 1 ELSE 0 END)
+               / NULLIF(SUM(CASE WHEN l.won_date <= '2018-06-30' THEN 1 ELSE 0 END), 0), 1) AS signed_with_first_sale_pct,
+    ROUND(SUM(l.lifetime_gmv) / NULLIF(SUM(l.won), 0), 0)            AS gmv_per_signed_seller
+FROM seller_leads l
+LEFT JOIN median_close m USING (origin)
+GROUP BY l.origin
+ORDER BY leads DESC;
 
 
--- name: product_performance
--- Last 6 months (Jan-Jun 2026): each payment product's revenue, risk and support load.
-WITH h1 AS (
-    SELECT * FROM merchant_months WHERE month BETWEEN '2026-01' AND '2026-06'
+-- name: seller_activation_by_type
+-- Which kinds of signed sellers actually start selling? (deals won by 30 Jun 2018)
+SELECT
+    COALESCE(lead_type, 'unknown')                                  AS seller_type,
+    COUNT(*)                                                        AS signed_sellers,
+    ROUND(100.0 * AVG(first_sale_at IS NOT NULL), 1)                AS with_first_sale_pct,
+    ROUND(AVG(days_won_to_first_sale), 0)                           AS avg_days_to_first_sale,
+    ROUND(SUM(lifetime_gmv) / COUNT(*), 0)                          AS gmv_per_signed_seller
+FROM seller_leads
+WHERE won = 1 AND won_date <= '2018-06-30'
+GROUP BY 1
+HAVING COUNT(*) >= 10
+ORDER BY signed_sellers DESC;
+
+
+-- name: seller_concentration
+-- How concentrated are sales? Sellers ranked into 10 equal groups by GMV.
+WITH seller_gmv AS (
+    SELECT seller_id, SUM(price) AS gmv
+    FROM order_items
+    WHERE in_period = 1 AND is_canceled = 0
+    GROUP BY seller_id
 ),
-tickets AS (
-    SELECT product, COUNT(*) AS tickets
-    FROM support_tickets
-    WHERE opened_month BETWEEN '2026-01' AND '2026-06'
-    GROUP BY product
+ranked AS (
+    SELECT seller_id, gmv, NTILE(10) OVER (ORDER BY gmv DESC) AS decile FROM seller_gmv
 )
 SELECT
-    h1.product,
-    COUNT(DISTINCT h1.merchant_id)                                       AS active_merchants,
-    ROUND(SUM(h1.approved_volume), 0)                                    AS approved_volume,
-    ROUND(SUM(h1.processing_revenue + h1.platform_fee), 0)               AS net_revenue,
-    ROUND(SUM(h1.processing_revenue + h1.platform_fee) / COUNT(*), 2)    AS revenue_per_merchant_month,
-    ROUND(100.0 * SUM(h1.approved_txns) / SUM(h1.attempted_txns), 2)     AS approval_rate_pct,
-    ROUND(100.0 * SUM(h1.chargeback_count) / SUM(h1.credit_txns), 3)     AS chargeback_rate_pct,
-    ROUND(100.0 * t.tickets / COUNT(*), 1)                               AS tickets_per_100_merchant_months
-FROM h1
-LEFT JOIN tickets t USING (product)
-GROUP BY h1.product
-ORDER BY net_revenue DESC;
+    decile                                                           AS seller_decile,
+    COUNT(*)                                                         AS sellers,
+    ROUND(SUM(gmv), 0)                                               AS gmv,
+    ROUND(100.0 * SUM(gmv) / SUM(SUM(gmv)) OVER (), 1)               AS gmv_share_pct,
+    ROUND(100.0 * SUM(SUM(gmv)) OVER (ORDER BY decile) / SUM(SUM(gmv)) OVER (), 1) AS cumulative_share_pct
+FROM ranked
+GROUP BY decile
+ORDER BY decile;
 
 
--- name: card_type_mix
--- Card mix for the full period: share of volume vs share of revenue.
-WITH totals AS (
-    SELECT SUM(approved_volume) AS vol, SUM(processing_revenue) AS rev FROM monthly_volume
-)
+-- name: delivery_vs_review
+-- Customer experience: how review scores change when an order arrives late.
 SELECT
-    card_type,
-    ROUND(100.0 * SUM(approved_volume) / t.vol, 1)            AS volume_share_pct,
-    ROUND(100.0 * SUM(processing_revenue) / t.rev, 1)         AS processing_revenue_share_pct,
-    ROUND(100.0 * SUM(approved_txns) / SUM(attempted_txns), 2) AS approval_rate_pct
-FROM monthly_volume, totals t
-GROUP BY card_type
-ORDER BY volume_share_pct DESC;
+    CASE
+        WHEN delivered_on_time = 1                                         THEN '1) On time'
+        WHEN julianday(DATE(d.order_delivered_customer_date)) - julianday(DATE(d.order_estimated_delivery_date)) <= 3 THEN '2) 1-3 days late'
+        WHEN julianday(DATE(d.order_delivered_customer_date)) - julianday(DATE(d.order_estimated_delivery_date)) <= 7 THEN '3) 4-7 days late'
+        ELSE                                                                    '4) 8+ days late'
+    END                                                         AS delivery,
+    COUNT(*)                                                    AS orders,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 1)          AS share_pct,
+    ROUND(AVG(o.review_score), 2)                               AS avg_review_score,
+    ROUND(100.0 * AVG(CASE WHEN o.review_score IS NOT NULL THEN (o.review_score <= 2) END), 1) AS low_review_pct
+FROM orders o
+JOIN raw_orders d USING (order_id)
+WHERE o.in_period = 1 AND o.delivered_on_time IS NOT NULL
+GROUP BY 1
+ORDER BY 1;
 
 
--- name: service_levels_by_category
--- Service levels by ticket type, comparing normal months with the Mar-Apr 2026 incident.
+-- name: late_delivery_cause
+-- When an order is late, was the seller late handing it over, or was transit slow?
 SELECT
-    category,
-    CASE WHEN opened_month IN ('2026-03', '2026-04') THEN 'Mar-Apr 2026' ELSE 'Other months' END AS period,
-    COUNT(*)                                                        AS resolved_tickets,
-    ROUND(AVG(resolution_hours), 1)                                 AS avg_resolution_hours,
-    ROUND(100.0 * AVG(CASE WHEN resolution_hours <= 48 THEN 1.0 ELSE 0.0 END), 1) AS pct_within_48h_sla,
-    ROUND(AVG(csat_score), 2)                                       AS avg_csat
-FROM support_tickets
-WHERE ticket_status = 'Resolved'
-GROUP BY category, period
-ORDER BY category, period DESC;
+    CASE seller_shipped_on_time WHEN 1 THEN 'Seller shipped on time' ELSE 'Seller shipped late' END AS seller_handoff,
+    COUNT(*)                                                    AS delivered_orders,
+    ROUND(100.0 * (1 - AVG(delivered_on_time)), 1)              AS late_delivery_pct,
+    ROUND(AVG(review_score), 2)                                 AS avg_review_score
+FROM orders
+WHERE in_period = 1 AND delivered_on_time IS NOT NULL AND seller_shipped_on_time IS NOT NULL
+GROUP BY 1
+ORDER BY 1 DESC;
 
 
--- name: slow_ticket_vs_churn
--- Merchants who wait more than 48 hours for a ticket: are they more likely to
--- close their account in the next 3 months? (merchant-months up to Mar 2026,
--- so every row has a full 3 months of follow-up)
-WITH slow_months AS (
-    SELECT DISTINCT merchant_id, opened_month AS month
-    FROM support_tickets
-    WHERE ticket_status = 'Resolved' AND resolution_hours > 48
-),
-mm AS (
+-- name: category_performance
+-- Top 10 product categories by GMV.
+WITH cat AS (
     SELECT
-        x.merchant_id,
-        x.month,
-        CASE WHEN s.merchant_id IS NOT NULL THEN 'Had a ticket over 48h' ELSE 'No slow ticket' END AS ticket_experience,
-        CASE WHEN m.closed_month >= x.month
-              AND m.closed_month <= SUBSTR(DATE(x.month || '-01', '+3 months'), 1, 7)
-             THEN 1 ELSE 0 END AS closed_within_3m
-    FROM merchant_months x
-    JOIN merchants m USING (merchant_id)
-    LEFT JOIN slow_months s USING (merchant_id, month)
-    WHERE x.month <= '2026-03'
+        i.category,
+        SUM(i.price)                         AS gmv,
+        COUNT(DISTINCT i.order_id)           AS orders,
+        COUNT(DISTINCT i.seller_id)          AS sellers,
+        AVG(i.price)                         AS avg_item_price
+    FROM order_items i
+    WHERE i.in_period = 1 AND i.is_canceled = 0
+    GROUP BY i.category
+),
+cat_cx AS (
+    SELECT i.category, AVG(o.delivered_on_time) AS on_time, AVG(o.review_score) AS review
+    FROM (SELECT DISTINCT order_id, category FROM order_items WHERE in_period = 1 AND is_canceled = 0) i
+    JOIN orders o USING (order_id)
+    GROUP BY i.category
 )
 SELECT
-    ticket_experience,
-    COUNT(*)                                   AS merchant_months,
-    ROUND(100.0 * AVG(closed_within_3m), 2)    AS closed_within_3_months_pct
-FROM mm
-GROUP BY ticket_experience
-ORDER BY ticket_experience;
+    c.category,
+    ROUND(c.gmv, 0)                                       AS gmv,
+    ROUND(100.0 * c.gmv / (SELECT SUM(gmv) FROM cat), 1)  AS gmv_share_pct,
+    c.orders,
+    c.sellers,
+    ROUND(c.avg_item_price, 2)                            AS avg_item_price,
+    ROUND(100.0 * x.on_time, 1)                           AS delivered_on_time_pct,
+    ROUND(x.review, 2)                                    AS avg_review_score
+FROM cat c
+JOIN cat_cx x USING (category)
+ORDER BY c.gmv DESC
+LIMIT 10;
+
+
+-- name: delivery_by_state
+-- Delivery service by customer state (10 states with the most orders).
+SELECT
+    customer_state,
+    COUNT(*)                                       AS delivered_orders,
+    ROUND(AVG(delivery_days), 1)                   AS avg_delivery_days,
+    ROUND(100.0 * AVG(delivered_on_time), 1)       AS delivered_on_time_pct,
+    ROUND(AVG(review_score), 2)                    AS avg_review_score
+FROM orders
+WHERE in_period = 1 AND delivered_on_time IS NOT NULL
+GROUP BY customer_state
+ORDER BY delivered_orders DESC
+LIMIT 10;

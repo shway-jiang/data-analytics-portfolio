@@ -1,0 +1,11 @@
+lead_channel,leads,signed_sellers,lead_to_signed_pct,median_days_to_close,signed_with_first_sale_pct,gmv_per_signed_seller
+organic_search,2296,271,11.8,14.5,48.5,764.0
+paid_search,1586,195,12.3,15.0,59.6,784.0
+social,1350,75,5.6,30.0,47.6,579.0
+unknown,1159,193,16.7,11.0,47.4,1113.0
+direct_traffic,499,56,11.2,10.0,58.5,391.0
+email,493,15,3.0,21.0,46.2,566.0
+referral,284,24,8.5,18.5,47.4,745.0
+other,150,4,2.7,9.0,50.0,1722.0
+display,118,6,5.1,8.5,33.3,154.0
+other_publicities,65,3,4.6,35.0,0.0,0.0
