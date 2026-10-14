@@ -1,0 +1,9 @@
+industry,active_merchants,approved_volume,volume_share_pct,net_revenue,revenue_share_pct,avg_ticket,approval_rate_pct,chargeback_rate_pct,revenue_per_merchant_month
+Restaurants,280,54808712.0,20.2,265885.0,18.9,41.87,96.57,0.049,216.52
+Retail,264,44176023.0,16.3,226514.0,16.1,54.89,96.6,0.046,185.36
+Grocery & Convenience,109,43779360.0,16.1,216789.0,15.4,37.85,96.58,0.052,430.14
+E-commerce,214,33313637.0,12.3,209409.0,14.9,84.64,92.17,0.393,209.62
+Automotive,111,35122298.0,12.9,160162.0,11.4,259.88,96.62,0.057,324.87
+Hospitality,77,25452421.0,9.4,128538.0,9.1,209.15,96.58,0.048,365.16
+Professional Services,186,21927159.0,8.1,125397.0,8.9,179.26,95.25,0.193,146.83
+Health & Beauty,176,13081982.0,4.8,74354.0,5.3,74.75,96.61,0.059,93.17

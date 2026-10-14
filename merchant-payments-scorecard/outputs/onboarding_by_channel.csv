@@ -1,0 +1,5 @@
+sales_channel,applications,approval_rate_pct,avg_days_to_decision,activated_within_30d_pct,median_days_to_first_txn,retained_6m_pct,revenue_per_active_month
+Direct Sales,546,94.5,5.5,91.5,5.0,93.8,202.65
+Bank Partner Referral,516,95.0,7.0,92.7,6.0,93.4,206.85
+ISO Partner,298,91.9,8.5,85.4,7.0,90.7,204.23
+Online Self-Signup,740,84.3,2.0,68.8,9.0,83.4,295.18

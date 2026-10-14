@@ -1,0 +1,11 @@
+check_name,failing_rows,action
+Duplicate merchant records,12,Keep one copy
+Merchant missing province,25,"Report as ""Unknown"""
+Industry label not on approved list,25,Map to the standard label
+First transaction before approval,0,Investigate if > 0
+Declined merchant with transactions,0,Investigate if > 0
+Duplicate monthly volume rows,40,Keep one copy
+Volume rows with unknown merchant,0,Investigate if > 0
+Volume rows failing logic checks,0,Investigate if > 0
+Ticket resolved before opened,8,Exclude from service-level metrics
+CSAT score outside 1-5,0,Exclude from CSAT
