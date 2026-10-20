@@ -2,7 +2,7 @@
 
 **Status:** complete (Oct 2026) · **[Read the report](report.md)**
 
-A forecasting project on Statistics Canada's official monthly retail trade data. It forecasts retail sales 12 months ahead for Canada, the 10 provinces and the 5 biggest store types, and tests every model on a year of data it never saw (backtesting).
+A forecasting project on Statistics Canada's official monthly retail trade data. It forecasts retail sales 12 months ahead for Canada, the 10 provinces and the 5 biggest store types (motor vehicle and parts, food and beverage, general merchandise, gas stations, and health and personal care), and tests every model on a year of data it never saw (backtesting).
 
 ## Key results
 - Canadian retail sales forecast to grow **about 4.4%** (Aug 2026 – Jul 2027)

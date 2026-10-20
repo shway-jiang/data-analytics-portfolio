@@ -16,7 +16,12 @@
 16 monthly series:
 - **Canada total**, for an overall view
 - **The 10 provinces**, for government planning (tax revenue, infrastructure, local economic policy)
-- **The 5 biggest store types in Canada** (by sales over the last 12 months), for retailer planning (stock, staffing, store openings): motor vehicle and parts, food and beverage, general merchandise, gas stations, and health and personal care
+- **The 5 biggest store types in Canada** (by sales over the last 12 months), for retailer planning (stock, staffing, store openings):
+  1. **Motor vehicle and parts dealers:** new and used car dealers, auto parts and tire stores
+  2. **Food and beverage retailers:** supermarkets, convenience stores, specialty food, beer, wine and liquor stores
+  3. **General merchandise retailers:** department stores, warehouse clubs and supercentres
+  4. **Gasoline stations and fuel vendors**
+  5. **Health and personal care retailers:** pharmacies and other health and beauty stores
 
 Seasonally adjusted data was used so the forecasts show the underlying trend, not the December holiday spike.
 
