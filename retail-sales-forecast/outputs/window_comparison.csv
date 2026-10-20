@@ -1,0 +1,3 @@
+training_window,ARIMA+COVID,Drift,ETS,Naive,best_model_per_series
+Full history (2017+),2.59,2.43,2.83,3.86,2.03
+Post-COVID only (Jul 2021+),2.93,2.43,3.20,3.86,2.16

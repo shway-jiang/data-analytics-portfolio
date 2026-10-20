@@ -9,6 +9,7 @@
 - **Forecasting beats guessing.** Using each series' best model, the average monthly error in the backtest was **2.0%**, versus **3.9%** for the simple baseline of repeating last month's sales.
 - **Fastest-growing provinces:** Prince Edward Island (+9.3%), Newfoundland and Labrador (+8.4%) and Alberta (+8.0%). **Slowest:** British Columbia (+2.1%).
 - **Store types:** health and personal care (+10.0%) and general merchandise (+6.9%) lead; food and beverage is almost flat (+1.0%).
+- **Pre-COVID data still helps.** Training on the full history (2017+) beat training on post-COVID data only (Jul 2021+) for 12 of 16 series.
 - **Gas stations are not predictable with these models** (about 9% error for every model), so their +11.3% forecast should not be relied on.
 
 ## What was forecast
@@ -45,6 +46,18 @@ Each model forecast Aug 2025 – Jul 2026 using only data up to Jul 2025. Error 
 
 All models except Naive caught the upward trend; actual sales grew a little faster than Drift and ETS expected in 2026.
 
+## Does pre-COVID data still help?
+Spending changed a lot after COVID, so it is fair to ask whether 2017–2019 data is now outdated. Instead of guessing, the backtest was run twice: once trained on the full history (COVID months flagged) and once on post-COVID data only (from July 2021).
+
+| Training window | ARIMA + COVID flag | ETS | Best model per series |
+|---|---|---|---|
+| Full history (2017+) | 2.59% | 2.83% | **2.03%** |
+| Post-COVID only (Jul 2021+) | 2.93% | 3.20% | 2.16% |
+
+(Drift and Naive don't change: Drift already uses only post-COVID data, and Naive uses only the last month.)
+
+**Result:** the full history was more accurate overall and for **12 of 16 series**, so it is used for the final forecast. The exceptions are worth noting: **Canada total, Ontario, food and beverage, and health and personal care** were forecast better with post-COVID data only, which suggests the biggest, most consumer-driven series have changed the most since COVID. With only about 4 years of post-COVID data, the models have less to learn from, which likely hurt the smaller provinces most.
+
 ## 12-month forecast
 | Series | Last 12 months | Next 12 months | Growth |
 |---|---|---|---|
@@ -78,6 +91,7 @@ All models except Naive caught the upward trend; actual sales grew a little fast
 3. Don't plan on the gas station forecast. Fuel sales follow oil prices, which these models can't see.
 
 ## Limitations
+- **One test year.** The training-window comparison uses the same single test period, so the small gap (2.03% vs 2.16%) should be confirmed with more test periods.
 - **One backtest window.** Models were compared on a single 12-month period. Testing several past cutoffs would give a more reliable ranking.
 - **Picking the best model on the same test period** makes the 2.0% error slightly optimistic.
 - **Dollar sales include inflation.** Part of the growth is higher prices, not more items sold. StatCan's volume table (20-10-0067-01) could separate the two.
