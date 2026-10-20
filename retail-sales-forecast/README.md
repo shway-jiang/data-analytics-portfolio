@@ -6,6 +6,7 @@ A forecasting project on Statistics Canada's official monthly retail trade data.
 
 ## Key results
 - Canadian retail sales forecast to grow **about 4.4%** (Aug 2026 – Jul 2027)
+- About 1 point above the **Bank of Canada's** outlook (≈ +3% to +3.5%); the report explains why
 - Best models cut the average monthly error to **2.0%**, versus **3.9%** for the naive baseline
 - Fastest-growing provinces: **PEI, Newfoundland and Labrador, Alberta** (+8% to +9%); slowest: **BC** (+2%)
 - Keeping pre-COVID data **helped**: full history beat post-COVID-only training for **12 of 16** series

@@ -9,6 +9,7 @@
 - **Forecasting beats guessing.** Using each series' best model, the average monthly error in the backtest was **2.0%**, versus **3.9%** for the simple baseline of repeating last month's sales.
 - **Fastest-growing provinces:** Prince Edward Island (+9.3%), Newfoundland and Labrador (+8.4%) and Alberta (+8.0%). **Slowest:** British Columbia (+2.1%).
 - **Store types:** health and personal care (+10.0%) and general merchandise (+6.9%) lead; food and beverage is almost flat (+1.0%).
+- **About 1 point above the Bank of Canada's outlook** (our +4.4% vs roughly +3–3.5% implied by its July 2026 projections), mainly because our models extend recent momentum and can't see slowing population growth or falling gas prices.
 - **Pre-COVID data still helps.** Training on the full history (2017+) beat training on post-COVID data only (Jul 2021+) for 12 of 16 series.
 - **Gas stations are not predictable with these models** (about 9% error for every model), so their +11.3% forecast should not be relied on.
 
@@ -84,6 +85,30 @@ Spending changed a lot after COVID, so it is fair to ask whether 2017–2019 dat
 | Health and personal care retailers | $76.2B | $83.8B | +10.0% |
 
 ![All forecasts](outputs/forecasts_all.png)
+
+## Compared with the Bank of Canada
+Statistics Canada publishes actual data, not forecasts, so the official benchmark is the Bank of Canada's [Monetary Policy Report (July 2026)](https://www.bankofcanada.ca/publications/mpr/mpr-2026-07-15/canadian-outlook/). It projects:
+- **Household consumption growth just above 1% a year** on average, after removing inflation
+- **CPI inflation** easing to about 2½% in the second half of 2026 (mainly lower gas prices) and back to about 2% in early 2027
+- Spending held back by **subdued population growth, higher gas prices and weak housing activity**
+
+Adding inflation to real growth gives an approximate benchmark for spending in dollars:
+
+| | Next 12 months |
+|---|---|
+| Bank of Canada (≈1% real growth + 2–2½% inflation) | **≈ +3% to +3.5%** |
+| This project (Canada total) | **+4.4%** |
+
+**Why the two differ**
+1. **Our models extend recent momentum.** Retail sales rose strongly in the first half of 2026, and time series models assume that trend continues. The Bank builds in reasons it should slow.
+2. **No outside drivers.** The Bank expects slower population growth and weak housing activity to hold back spending. Our models only see past sales, not population, housing or interest rates.
+3. **Inflation is baked into our trend.** Our data is in dollars, and inflation was about 3% in spring 2026. The models carry that pace forward, while the Bank expects inflation to ease to about 2%.
+4. **Gas prices.** The Bank expects gasoline prices to fall. Higher fuel prices lifted recent retail sales, so our trend overstates that part of spending. This is also why the +11.3% gas station forecast is unreliable.
+5. **Different measures and periods.** The Bank forecasts all household consumption (including services such as rent and travel) by calendar year; this project forecasts retail store sales only, for Aug 2026 – Jul 2027. So the benchmark is approximate.
+
+**Reading the gap:** the Bank's outlook suggests our +4.4% is on the optimistic side, and a realistic range is about **+3% to +4.5%**. But the gap isn't automatically an error: in the backtest, actual 2026 sales grew *faster* than most models expected. Adding population, interest rates and inflation as drivers (a planned next step) would show how much of the gap they explain.
+
+*The July 2026 sales level in the data ($73.7B) matches Statistics Canada's [September release](https://www.bnnbloomberg.ca/business/economics/2026/09/24/statistics-canada-reports-retail-sales-down-07-in-july-at-737b/), a check that the download and processing are correct.*
 
 ## Recommendations
 **For government planning**
