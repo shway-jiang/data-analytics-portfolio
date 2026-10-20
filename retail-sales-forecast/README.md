@@ -1,21 +1,35 @@
 # Canadian Retail Sales Forecast
 
-**Status:** in progress
+**Status:** complete (Oct 2026) · **[Read the report](report.md)**
 
-A forecasting project using Statistics Canada's official monthly retail trade data. It predicts retail sales by province and store type for the next 6 to 12 months, and checks the forecasts against months the model never saw (backtesting).
+A forecasting project on Statistics Canada's official monthly retail trade data. It forecasts retail sales 12 months ahead for Canada, the 10 provinces and the 5 biggest store types, and tests every model on a year of data it never saw (backtesting).
+
+## Key results
+- Canadian retail sales forecast to grow **about 4.4%** (Aug 2026 – Jul 2027)
+- Best models cut the average monthly error to **2.0%**, versus **3.9%** for the naive baseline
+- Fastest-growing provinces: **PEI, Newfoundland and Labrador, Alberta** (+8% to +9%); slowest: **BC** (+2%)
+- Strongest store types: **health and personal care** (+10%) and **general merchandise** (+7%); food and beverage nearly flat (+1%)
+
+![Forecasts](outputs/forecasts_all.png)
 
 ## Why it matters
-Retail spending drives card payment volume. A business that can see a slowdown or a holiday spike coming can plan staffing, server capacity and cash flow ahead of time instead of reacting late.
+- **Government planning:** which provinces will see the most retail activity and sales-tax revenue
+- **Retailer planning:** which store types are growing, for stock, staffing and new locations
+- **Payments:** retail spending drives card transaction volume
 
-## Planned questions
-1. How much will retail sales grow over the next year, nationally and by province?
-2. Which store types are slowing down, and which are growing?
-3. How accurate are simple baselines (last year's value) compared with time series models?
-4. How big are seasonal peaks like December, and how well can they be predicted?
+## Approach
+- **Data:** Statistics Canada Table 20-10-0056-01, seasonally adjusted, Jan 2017 – Jul 2026 (real public data, downloaded automatically)
+- **Models:** naive baseline, drift, exponential smoothing (damped trend), ARIMA with a COVID flag
+- **COVID (Mar 2020 – Jun 2021):** kept in the data but flagged, so the shock doesn't distort the trend
+- **Backtest:** trained on data up to Jul 2025, forecast Aug 2025 – Jul 2026, compared with actual sales (MAPE); each series then uses its best model
+- **Tools:** Python (pandas, statsmodels, matplotlib), Jupyter
 
-## Planned approach
-- **Data:** Statistics Canada monthly retail trade sales (real public data, no simulated values)
-- **Methods:** seasonal baseline, exponential smoothing and SARIMA, compared on rolling backtests
-- **Tools:** Python (pandas, statsmodels), SQL, Power BI or Excel for the final view
+## Files
+| File | What it is |
+|---|---|
+| [`report.md`](report.md) | Findings, recommendations and limitations |
+| [`notebooks/01_explore.ipynb`](notebooks/01_explore.ipynb) | First look at the data and the 6 analysis decisions |
+| [`notebooks/02_forecast.ipynb`](notebooks/02_forecast.ipynb) | Full pipeline: download, models, backtest, forecast |
+| [`outputs/`](outputs) | Backtest errors, growth table, charts |
 
-*This is a personal project and not financial advice.*
+*Personal project; not financial advice.*

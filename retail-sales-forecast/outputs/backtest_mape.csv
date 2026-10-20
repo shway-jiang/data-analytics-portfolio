@@ -1,0 +1,17 @@
+geo,store_type,ARIMA+COVID,Drift,ETS,Naive,best_model
+Alberta,All retail,2.80,2.97,3.81,4.64,ARIMA+COVID
+British Columbia,All retail,3.21,1.01,1.27,1.19,Drift
+Canada,All retail,1.53,1.06,1.39,2.56,Drift
+Canada,Food and beverage retailers,1.99,1.05,0.91,1.06,ETS
+Canada,Gasoline stations and fuel vendors,9.27,8.64,9.04,9.04,Drift
+Canada,General merchandise retailers,1.09,1.29,2.35,4.62,ARIMA+COVID
+Canada,Health and personal care retailers,2.56,3.23,4.12,6.08,ARIMA+COVID
+Canada,Motor vehicle and parts dealers,1.40,1.59,1.66,1.70,ARIMA+COVID
+Manitoba,All retail,0.95,1.57,2.24,3.19,ARIMA+COVID
+New Brunswick,All retail,0.93,1.49,1.80,3.85,ARIMA+COVID
+Newfoundland and Labrador,All retail,5.93,7.48,6.96,9.10,ARIMA+COVID
+Nova Scotia,All retail,0.79,2.36,2.54,4.04,ARIMA+COVID
+Ontario,All retail,2.79,1.21,1.41,2.41,Drift
+Prince Edward Island,All retail,1.78,2.31,3.28,4.00,ARIMA+COVID
+Quebec,All retail,3.57,0.52,1.29,2.26,Drift
+Saskatchewan,All retail,0.85,1.12,1.28,2.08,ARIMA+COVID
