@@ -35,7 +35,7 @@ A personal portfolio project. It recreates the recurring reporting an analytics 
 
 ## Key findings
 **Growth has stalled, and sales per seller are falling**
-- Monthly GMV grew from R$120K in January 2017 to a Black Friday peak of R$1.0M (November 2017), then levelled off at R$840K–1.0M a month through 2018.
+- Monthly GMV grew from R$120K in January 2017 to a Black Friday peak of R$1.0M (November 2017), then levelled off at about R$840K–1.0M a month through 2018.
 - Active sellers kept rising (968 in January 2018 to 1,266 in August, +31%), but **GMV per active seller fell from R$977 to R$671 (−31%)**. New sellers are adding fewer sales than the existing ones.
 - Sales are concentrated: **the top 10% of sellers make 67% of GMV**, while the bottom half make about 3%.
 
@@ -44,7 +44,7 @@ A personal portfolio project. It recreates the recurring reporting an analytics 
 - **68% of card orders are split into installments.** Plans of 7–10 installments are only 16% of card orders but **32% of card value**, with an average order of R$334 against R$101 for orders paid in full.
 
 **Seller onboarding**
-- Of 8,000 seller leads, 842 signed (10.5%). But **only 51% of signed sellers made a single sale** (deals signed by June 2018).
+- Of 8,000 seller leads, 842 signed (10.5%). But **only 51% of signed sellers made even one sale** (deals signed by June 2018).
 - **Paid search** brings the best mix: 12% of leads sign and 60% of those start selling. Social media (6% sign) and email (3%) convert poorly.
 - Large online sellers ("online big") start selling 69% of the time and bring R$2,680 GMV each; offline and industry sellers start only about a third of the time and bring about R$215–265 each.
 

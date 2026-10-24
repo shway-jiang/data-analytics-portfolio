@@ -37,7 +37,7 @@ An online store's data shows that **only 7.2% of shoppers who view a product end
 - **Budget is concentrated in the most expensive campaign.**
 - **Age:** 30–34-year-olds cost **$31** per sale and 45–49-year-olds **$100**, even though the older group clicks the most. Clicks aren't the same as buyers.
 - **Gender:** men cost $41 per sale, women $70.
-- **Interests:** the best groups (#2, 65, 101, 21) cost $26–31 per sale. The worst (#105, 109, 27) cost $96–108.
+- **Interests** (groups with at least 10 sales): the cheapest (#31, 36, 2, 65) cost $19–29 per sale. The most expensive (#25, 22, 27) cost $84–96.
 
 ---
 

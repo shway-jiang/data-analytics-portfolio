@@ -9,7 +9,7 @@ A forecasting project on Statistics Canada's official monthly retail trade data.
 - About 1 point above the **Bank of Canada's** outlook (≈ +3% to +3.5%); the report explains why
 - Best models cut the average monthly error to **2.0%**, versus **3.9%** for the naive baseline
 - Fastest-growing provinces: **PEI, Newfoundland and Labrador, Alberta** (+8% to +9%); slowest: **BC** (+2%)
-- Keeping pre-COVID data **helped**: full history beat post-COVID-only training for **12 of 16** series
+- Keeping pre-COVID data **helped**: full history beat post-COVID-only training for **9 of 16** series (3 tied, 4 worse) and gave the lower average error
 - Strongest store types: **health and personal care** (+10%) and **general merchandise** (+7%); food and beverage nearly flat (+1%)
 
 ![Forecasts](outputs/forecasts_all.png)

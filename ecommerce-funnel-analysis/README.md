@@ -50,7 +50,7 @@ The two datasets aren't linked, so they are presented as two separate analyses, 
 - **Campaign C takes 95% of the spend but costs $64 per sale**, compared with $16 (B) and $6 (A).
 - Ages 30–34 cost $31 per sale and ages 45–49 cost $100, even though the 45–49 group has the highest click rate.
 - Men cost $41 per sale and women $70.
-- The best interest groups (#2, 65, 101, 21) cost about $26–31 per sale; the worst (#27, 109, 105) about $96–108.
+- Among interest groups with at least 10 sales, the cheapest (#31, 36, 2, 65) cost about $19–29 per sale; the most expensive (#25, 22, 27) about $84–96.
 
 ## Recommendations
 1. Test moving budget from Campaign C to Campaigns A and B, and toward ages 30–34 and the top interest groups.

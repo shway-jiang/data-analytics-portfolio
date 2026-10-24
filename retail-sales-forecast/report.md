@@ -10,7 +10,7 @@
 - **Fastest-growing provinces:** Prince Edward Island (+9.3%), Newfoundland and Labrador (+8.4%) and Alberta (+8.0%). **Slowest:** British Columbia (+2.1%).
 - **Store types:** health and personal care (+10.0%) and general merchandise (+6.9%) lead; food and beverage is almost flat (+1.0%).
 - **About 1 point above the Bank of Canada's outlook** (our +4.4% vs roughly +3–3.5% implied by its July 2026 projections), mainly because our models extend recent momentum and can't see slowing population growth or falling gas prices.
-- **Pre-COVID data still helps.** Training on the full history (2017+) beat training on post-COVID data only (Jul 2021+) for 12 of 16 series.
+- **Pre-COVID data still helps.** Training on the full history (2017+) beat training on post-COVID data only (Jul 2021+) for 9 of 16 series (3 tied, 4 worse), with a lower average error.
 - **Gas stations are not predictable with these models** (about 9% error for every model), so their +11.3% forecast should not be relied on.
 
 ## What was forecast
@@ -62,7 +62,7 @@ Spending changed a lot after COVID, so it is fair to ask whether 2017–2019 dat
 
 (Drift and Naive don't change: Drift already uses only post-COVID data, and Naive uses only the last month.)
 
-**Result:** the full history was more accurate overall and for **12 of 16 series**, so it is used for the final forecast. The exceptions are worth noting: **Canada total, Ontario, food and beverage, and health and personal care** were forecast better with post-COVID data only, which suggests the biggest, most consumer-driven series have changed the most since COVID. With only about 4 years of post-COVID data, the models have less to learn from, which likely hurt the smaller provinces most.
+**Result:** the full history was more accurate overall and for **9 of 16 series**, so it is used for the final forecast. Three series were tied (BC, Quebec and gas stations, whose best model, Drift, gives the same result with either window). The exceptions are worth noting: **Canada total, Ontario, food and beverage, and health and personal care** were forecast better with post-COVID data only, which suggests the biggest, most consumer-driven series have changed the most since COVID. With only about 4 years of post-COVID data, the models have less to learn from, which likely hurt the smaller provinces most.
 
 ## 12-month forecast
 | Series | Last 12 months | Next 12 months | Growth |
