@@ -18,6 +18,7 @@ A personal portfolio project on Canada's cost of living. It automatically record
 - **One fixed product per store and item**, regular (non-organic, non-specialty) products only. The price recorded is the price on that day, never a future sale. Full rules: [`data_collection_rules.md`](data_collection_rules.md). Products: [`product_list.md`](product_list.md).
 - **Automation:** two scheduled AI agents run every morning. A cloud agent reads Loblaws, No Frills, Superstore and Voilà; a browser agent reads Walmart and Metro. Each saves one CSV per day and writes a one-line run log. Nothing missing is ever guessed: it's marked `not_found` or `failed`.
 - **About 90 price points a day from Oct 29**
+- **When and where:** daily at 5:41 am (Walmart, Metro) and 6:53 am (the others), Toronto time. Store locations, file formats and a column dictionary are in [About the data](data_collection_rules.md#about-the-data).
 
 ### Why these 15 items?
 It's a **staples basket**, not a weekly shopping list. Each item was chosen because it is:

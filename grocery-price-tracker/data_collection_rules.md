@@ -44,10 +44,56 @@ These are the rules the tracker follows from **Oct 29 to Dec 1, 2026** (method v
 - If a robot check or CAPTCHA appears, the agent does not try to get past it. The rows are marked `failed`.
 - The browser agent only reads pages. It never adds to cart, checks out or changes account details.
 
-## Output
-- **Columns:** `date, store, owner, item_id, product_name, size, price, regular_price, on_sale, unit_price, unit, status, notes`
-- **Files:** `grocery_YYYY-MM-DD.csv` (cloud agent, 60 rows) and `grocery_wm-metro_YYYY-MM-DD.csv` (browser agent, 30 rows)
-- **Run log:** every run adds a one-line summary: rows ok, not found and failed, sales, skipped future sales, and any problems.
+## About the data
+
+### When it's collected
+| | Loblaws, No Frills, Superstore, Voilà | Walmart, Metro |
+|---|---|---|
+| **Period** | Oct 11 – Dec 1, 2026 | Oct 29 – Dec 1, 2026 |
+| **Time** | Daily at 6:53 am Toronto time (about 7 minutes per run) | Daily at 5:41 am Toronto time |
+| **Collected by** | Cloud agent reading the public website | Browser agent in a signed-in Chrome browser |
+
+- Each row is the price shown online **at that morning's run**. A price change later in the day shows up the next day.
+- Dates are Toronto dates (America/Toronto).
+- Every day of the month (1–31) is covered at least once: Oct 11–31 plus Nov 1–30 and Dec 1.
+
+### Store locations
+Online prices can vary by store, so each store's location is fixed for the whole project.
+
+| Store | Location | Notes |
+|---|---|---|
+| Real Canadian Superstore | Gerry Fitzgerald Dr, Toronto (website default) | Default store confirmed on the website |
+| Loblaws | Website default store | The pages don't show which store; assumed Toronto area |
+| No Frills | Website default store | The pages don't show which store; assumed Toronto area |
+| Voilà (Sobeys) | Website default service area | Voilà is an online-only grocer; prices are for its default Ontario service area |
+| Walmart | Toronto Downsview, 3757 Keele St, Toronto (M3J 1N4) | Selected Oct 28; checked at every run |
+| Metro | Metro Downsview, 1090 Wilson Ave, North York (M3K 1G6) | Selected Oct 28; checked at every run |
+
+These are **online** prices. In-store shelf prices can differ.
+
+### Files
+| File | Contents | Rows per day |
+|---|---|---|
+| `grocery_YYYY-MM-DD.csv` | Loblaws, No Frills, Superstore, Voilà | 60 (4 stores × 15 items) |
+| `grocery_wm-metro_YYYY-MM-DD.csv` | Walmart, Metro (from Oct 29) | 30 (2 stores × 15 items) |
+| Run log | One line per run: rows ok / not found / failed, sales, skipped future sales, problems | — |
+
+### Columns
+| Column | Meaning |
+|---|---|
+| `date` | Date of the run (YYYY-MM-DD, Toronto time) |
+| `store` | `loblaws`, `nofrills`, `superstore`, `voila`, `walmart` or `metro` |
+| `owner` | Parent company: Loblaw, Sobeys, Walmart or Metro |
+| `item_id` | Basket item, e.g. `milk`, `beef` |
+| `product_name` | The exact product recorded, as named on the website |
+| `size` | Pack size as shown (e.g. `4 L`, `900 g`, `by weight`) |
+| `price` | Price paid for the pack that day, in CAD, before tax (the sale price if on sale) |
+| `regular_price` | The "was" price if on sale; otherwise the same as `price` |
+| `on_sale` | TRUE if the product was on sale that day |
+| `unit_price` | Price per unit, for comparing different pack sizes |
+| `unit` | `per_kg`, `per_L` or `per_each` (eggs) |
+| `status` | `ok`, `not_found` or `failed` (v1 used `no_match` instead of `not_found`) |
+| `notes` | Sale labels and end dates, multi-buy conditions, skipped future sales, how the unit price was calculated |
 
 ## What changed from v1 (Oct 11–28)
 | v1 (Oct 11–28) | v2 (from Oct 29) | Why |
