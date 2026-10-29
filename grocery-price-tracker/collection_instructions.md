@@ -1,6 +1,8 @@
-# Collection instructions (AI agent prompt)
+# Collection instructions, v1 (Oct 11–28, 2026)
 
-The tracker runs as a **daily scheduled AI agent** (Claude), every morning at 6:53 am Toronto time from Oct 11 to Nov 9, 2026. Each run starts fresh and follows the instructions below exactly. They're reproduced here so the method is transparent and repeatable.
+> **Superseded on Oct 29, 2026.** The current rules (one fixed product per store, regular products only, same-day prices only, six stores) are in [`data_collection_rules.md`](data_collection_rules.md). This page is kept to document how the Oct 11–28 data was collected.
+
+The tracker ran as a **daily scheduled AI agent** (Claude), every morning at 6:53 am Toronto time. Each run starts fresh and follows the instructions below exactly. They're reproduced here so the method is transparent and repeatable.
 
 **Design choices**
 - **Fixed basket, fixed rules:** the same 15 items and the same matching rules every day, so prices are comparable over time.
