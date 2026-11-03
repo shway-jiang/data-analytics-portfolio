@@ -8,5 +8,6 @@ Personal portfolio projects in SQL, Python, Excel, Power BI, forecasting and AI-
 | [Marketplace Payments & Merchant Performance Scorecard](merchant-payments-scorecard) | SQL (CTEs, window functions, data-quality checks), Python + Jupyter automation, Excel scorecard | Complete |
 | [Canadian Grocery Price Tracker](grocery-price-tracker) | Automated data collection, data quality, benchmarking vs Statistics Canada | Collecting data (Oct–Nov 2026) |
 | [Canadian Retail Sales Forecast](retail-sales-forecast) | Time series forecasting (ARIMA, exponential smoothing), backtesting, Python (statsmodels) | Complete |
+| [Seller Churn Prediction with a Rolling Backtest](seller-churn-prediction) | Python (scikit-learn), classification, rolling backtest, scoring results in money | In progress |
 
 **About me:** Data & Business Analyst with 5+ years of experience in insurance, online education and consulting. Master of Commerce in Business Analytics (UNSW). Bilingual in English and Mandarin.
