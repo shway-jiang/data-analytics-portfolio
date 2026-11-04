@@ -1,6 +1,6 @@
 # Seller Churn Prediction with a Rolling Backtest
 
-**Status:** 🔧 In progress. Three runs on the full Olist data and a round of review fixes are done (see Results). Not yet published.
+**Status:** ✅ Complete. Three runs on the full Olist data and a round of review fixes are done (see Results).
 
 A personal portfolio project. Which active sellers on an online marketplace are likely to stop selling in the next 90 days, and how much of the sales at risk can a limited outreach budget reach? A marketplace or payments team could use the answer to decide which merchants an account manager calls first.
 
