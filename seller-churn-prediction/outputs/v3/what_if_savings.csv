@@ -1,0 +1,4 @@
+model,sales_at_risk_reached_all_months,assumed_share_saved,assumed_reais_saved,note
+logistic_x_sales,709817.7999999999,0.1,70981.78,"assumption, not a result"
+logistic_x_sales,709817.7999999999,0.2,141963.56,"assumption, not a result"
+logistic_x_sales,709817.7999999999,0.3,212945.33999999997,"assumption, not a result"

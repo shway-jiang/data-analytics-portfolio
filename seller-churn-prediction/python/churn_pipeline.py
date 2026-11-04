@@ -9,6 +9,17 @@ Decisions (set by Xue, see docs/decisions.md):
   5. Features   = sales trend + service quality + reviews + seller profile.
   6. Goal       = sales at risk reached when outreach is limited to the top K sellers a month.
 
+Final choice (run 3): the headline model is logistic regression ranked by churn probability x
+gmv_90 ("x_sales"); gradient boosting x_sales is the comparison. Sales weights (run 2) did not help
+and are not used. No further variants will be tried. AUC / average precision always use the churn
+probability. auc_by_seller_size.csv compares the top 10% of sellers by gmv_90 with the rest;
+spread_by_model.csv, backtest_by_top_k.csv and what_if_savings.csv are the run 3 checks.
+
+Review fixes: features use only what was known on the cutoff date, rare categories are grouped using
+training rows only, the data ends before its incomplete last days (so May 2018 is the last test
+month), money_each_order_once.csv counts repeated sales once, and rule_silent_x_sales is a third
+simple rule (days since last order x gmv_90).
+
 Usage:
     python churn_pipeline.py --data ../data/raw --out ../outputs
 """
@@ -31,11 +42,29 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 # ---------------------------------------------------------------- settings
 CHURN_DAYS = 90          # decision 1: churn window
 ACTIVE_DAYS = 90         # decision 2: active = ordered in the last 90 days
-DATA_END = pd.Timestamp("2018-08-31")   # the Olist data is complete to the end of Aug 2018
+# last day with normal order volume: daily orders fade from Aug 22 and stop on Aug 29, 2018.
+# A 90-day outcome must fit before this date, so May 2018 is the last test month.
+DATA_END = pd.Timestamp("2018-08-21")
 FIRST_CUTOFF = pd.Timestamp("2017-04-01")  # first cutoff with a full 90-day look-back
 MIN_TRAIN_CUTOFFS = 3    # smallest number of past months a model needs before it is tested
 TOP_K = 100              # decision 6: sellers contacted per month
 SEED = 42
+WEIGHT_CLIP_Q = 0.99     # training weights: sales above this percentile of the TRAINING rows are capped
+MIN_WEIGHT = 1.0         # training weights: floor in R$ so no row gets a zero weight
+BIG_SELLER_Q = 0.90      # "big seller" = top 10% of the active sellers by gmv_90 on the test date
+MODEL_KINDS = ["logistic", "gradient_boosting"]
+# how a model's probability is turned into a contact list
+#   plain: rank by churn probability        x_sales: rank by probability x gmv_90
+#   weighted: trained with sales weights    weighted_x_sales: both
+VARIANTS = ["plain", "x_sales"]   # run 2 also tried "weighted" and "weighted_x_sales" (not needed, see docs)
+TOP_KS = [50, 100, 200]  # outreach sizes for the robustness check
+MAIN_MODEL = "logistic_x_sales"            # headline model, fixed in run 3
+COMPARISON_MODEL = "gradient_boosting_x_sales"
+BENCHMARK = "rule_biggest_sellers"
+SILENT_X_SALES = "rule_silent_x_sales"     # days since last order x gmv_90: money-aware rule, no model
+APPROACHES = [MAIN_MODEL, COMPARISON_MODEL, SILENT_X_SALES, BENCHMARK, "rule_days_since_last_order"]
+WHATIF_SAVED = [0.10, 0.20, 0.30]          # assumptions for the what-if table, not results
+RARE_GROUPS = [("top_category", 12), ("seller_state", 8)]   # keep the n most frequent, group the rest
 
 NUMERIC = [
     "orders_30", "orders_90", "orders_prev90", "orders_trend",
@@ -57,7 +86,7 @@ def load_seller_orders(data_dir: Path) -> pd.DataFrame:
                      "order_estimated_delivery_date"],
     )
     items = pd.read_csv(d / "olist_order_items_dataset.csv")
-    reviews = pd.read_csv(d / "olist_order_reviews_dataset.csv")
+    reviews = pd.read_csv(d / "olist_order_reviews_dataset.csv", parse_dates=["review_answer_timestamp"])
     products = pd.read_csv(d / "olist_products_dataset.csv")
     trans = pd.read_csv(d / "product_category_name_translation.csv")
 
@@ -67,7 +96,7 @@ def load_seller_orders(data_dir: Path) -> pd.DataFrame:
 
     # one review score per order (the latest one)
     reviews = (reviews.sort_values("review_answer_timestamp")
-               .drop_duplicates("order_id", keep="last")[["order_id", "review_score"]])
+               .drop_duplicates("order_id", keep="last")[["order_id", "review_score", "review_answer_timestamp"]])
 
     items = items.merge(products[["product_id", "product_category_name"]], on="product_id", how="left")
     items = items.merge(trans, on="product_category_name", how="left")
@@ -85,8 +114,9 @@ def load_seller_orders(data_dir: Path) -> pd.DataFrame:
     delivered = so["order_delivered_customer_date"].notna()
     so["late"] = np.where(delivered, (so["order_delivered_customer_date"]
                                       > so["order_estimated_delivery_date"]).astype(float), np.nan)
-    so = so.rename(columns={"order_purchase_timestamp": "ts"})
-    return so[["order_id", "seller_id", "ts", "gmv", "category", "late", "review_score"]]
+    so = so.rename(columns={"order_purchase_timestamp": "ts", "order_delivered_customer_date": "delivered_at",
+                            "review_answer_timestamp": "review_at"})
+    return so[["order_id", "seller_id", "ts", "gmv", "category", "late", "review_score", "delivered_at", "review_at"]]
 
 
 def load_sellers(data_dir: Path) -> pd.DataFrame:
@@ -115,11 +145,15 @@ def _window(so: pd.DataFrame, cutoff: pd.Timestamp, start_days: int, end_days: i
 def build_snapshot(so: pd.DataFrame, sellers: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
     """Features and churn label for every active seller at one cutoff date.
 
-    Features use only orders BEFORE the cutoff. The label looks at the 90 days AFTER it.
+    Features use only what was known BEFORE the cutoff: orders placed before it, and a late flag or
+    review only if the delivery or review had already happened. The label looks at the 90 days AFTER it.
     """
     past = so[so["ts"] < cutoff]
     w30 = _window(so, cutoff, 30, 0)
     w90 = _window(so, cutoff, ACTIVE_DAYS, 0)
+    # a delivery or review that happens after the cutoff was not known on the cutoff date
+    w90 = w90.assign(late=w90["late"].where(w90["delivered_at"] < cutoff),
+                     review_score=w90["review_score"].where(w90["review_at"] < cutoff))
     wprev = _window(so, cutoff, 2 * ACTIVE_DAYS, ACTIVE_DAYS)
 
     active = w90["seller_id"].unique()               # decision 2: who is active
@@ -175,12 +209,18 @@ def cutoff_dates() -> list[pd.Timestamp]:
 
 def build_panel(so: pd.DataFrame, sellers: pd.DataFrame) -> pd.DataFrame:
     snaps = [build_snapshot(so, sellers, c) for c in cutoff_dates()]
-    panel = pd.concat([s for s in snaps if len(s)], ignore_index=True)
-    # keep the most frequent categories / states, group the rest, so one-hot columns stay small
-    for col, n in [("top_category", 12), ("seller_state", 8)]:
-        keep = panel[col].value_counts().nlargest(n).index
-        panel[col] = panel[col].where(panel[col].isin(keep), "other")
-    return panel
+    return pd.concat([s for s in snaps if len(s)], ignore_index=True)
+
+
+def group_rare(train: pd.DataFrame, test: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Keep the most frequent categories / states, group the rest, so one-hot columns stay small.
+    Which ones to keep is decided from the training rows only."""
+    train, test = train.copy(), test.copy()
+    for col, n in RARE_GROUPS:
+        keep = train[col].value_counts().nlargest(n).index
+        train[col] = train[col].where(train[col].isin(keep), "other")
+        test[col] = test[col].where(test[col].isin(keep), "other")
+    return train, test
 
 
 # ---------------------------------------------------------------- models
@@ -202,15 +242,21 @@ def make_model(kind: str) -> Pipeline:
 
 
 # ---------------------------------------------------------------- scoring in money
+def top_sellers(test: pd.DataFrame, score: np.ndarray, k: int) -> pd.DataFrame:
+    """The k highest-scored sellers."""
+    return test.assign(_s=score).nlargest(min(k, len(test)), "_s")
+
+
 def sales_at_risk_reached(test: pd.DataFrame, score: np.ndarray, k: int) -> dict:
     """Contact the k highest-scored sellers. How much of the sales at risk do we reach?
 
     Sales at risk = a seller's sales in the 90 days before the cutoff, counted only for
     sellers who really did churn. 'Reached' = churners among the k contacted.
+    This is one month's view: summing it over months counts repeated sales again, because a
+    seller who stops stays 'active' at later cutoffs. See count_each_order_once for reais totals.
     """
     at_risk_total = float((test["gmv_90"] * test["churned"]).sum())
-    k = min(k, len(test))
-    top = test.assign(_s=score).nlargest(k, "_s")
+    top = top_sellers(test, score, k)
     reached = float((top["gmv_90"] * top["churned"]).sum())
     return {
         "sales_at_risk_total": at_risk_total,
@@ -220,12 +266,37 @@ def sales_at_risk_reached(test: pd.DataFrame, score: np.ndarray, k: int) -> dict
     }
 
 
-def rolling_backtest(panel: pd.DataFrame, top_k: int = TOP_K) -> pd.DataFrame:
+def training_weights(train: pd.DataFrame) -> np.ndarray:
+    """Sales weights for training (run 2 only; NOT used in the final run, see docs/decisions.md).
+
+    Uses ONLY the training rows. weight = gmv_90, capped at the 99th percentile of the training
+    rows and floored at MIN_WEIGHT, then divided by its mean so the average weight is 1.
+    """
+    g = train["gmv_90"].to_numpy(dtype=float)
+    cap = np.quantile(g, WEIGHT_CLIP_Q)
+    w = np.clip(g, MIN_WEIGHT, max(cap, MIN_WEIGHT))
+    return w / w.mean()
+
+
+def _auc(y, s):
+    return roc_auc_score(y, s) if len(np.unique(y)) == 2 else np.nan
+
+
+def rolling_backtest(panel: pd.DataFrame, top_k: int = TOP_K, ks: list[int] = TOP_KS,
+                     include_weighted: bool = False):
     """Monthly rolling backtest. For each test cutoff T:
        train on cutoffs C with C + 90 days <= T (their outcome was known on date T),
-       score the sellers active at T, compare with what really happened."""
+       score the sellers active at T, compare with what really happened.
+
+    Returns (backtest by month at top_k, AUC for big vs small sellers by month,
+             money reached by month at every size in ks, the sellers picked at every size).
+    AUC and average precision always use the churn probability (or the rule's own score),
+    never the probability x sales score. include_weighted=True re-creates the run 2 weighted
+    variants (not needed, kept so run 2 can be reproduced).
+    """
+    ks = sorted(set(ks) | {top_k})
     cuts = sorted(panel["cutoff"].unique())
-    rows = []
+    rows, size_rows, k_rows, picks = [], [], [], []
     for t in cuts:
         train_cuts = [c for c in cuts if c + pd.Timedelta(days=CHURN_DAYS) <= t]
         if len(train_cuts) < MIN_TRAIN_CUTOFFS:
@@ -234,31 +305,62 @@ def rolling_backtest(panel: pd.DataFrame, top_k: int = TOP_K) -> pd.DataFrame:
         test = panel[panel["cutoff"] == t]
         if train["churned"].nunique() < 2 or test["churned"].nunique() < 2:
             continue
+        train, test = group_rare(train, test)
+        gmv = test["gmv_90"].to_numpy(dtype=float)
+        silent = test["days_since_last_order"].to_numpy(dtype=float)
 
-        scores = {
+        # name -> (probability or rule score used for AUC / AP, score used to rank the top K)
+        entries = {
             # simple rule most teams would start with: the longer a seller is silent, the riskier
-            "rule_days_since_last_order": test["days_since_last_order"].to_numpy(dtype=float),
+            "rule_days_since_last_order": (silent, silent),
             # a second simple rule: biggest recent sellers first (what a sales team may do by default)
-            "rule_biggest_sellers": test["gmv_90"].to_numpy(dtype=float),
+            "rule_biggest_sellers": (gmv, gmv),
+            # a third simple rule, same money-aware idea as x_sales but with no model
+            SILENT_X_SALES: (silent * gmv, silent * gmv),
         }
-        for kind in ["logistic", "gradient_boosting"]:
-            m = make_model(kind).fit(train[FEATURES], train["churned"])
-            scores[kind] = m.predict_proba(test[FEATURES])[:, 1]
+        w = training_weights(train) if include_weighted else None
+        for kind in MODEL_KINDS:
+            plain = make_model(kind).fit(train[FEATURES], train["churned"])
+            p_plain = plain.predict_proba(test[FEATURES])[:, 1]
+            entries[f"{kind}_plain"] = (p_plain, p_plain)
+            entries[f"{kind}_x_sales"] = (p_plain, p_plain * gmv)   # expected money lost
+            if include_weighted:
+                weighted = make_model(kind).fit(train[FEATURES], train["churned"], model__sample_weight=w)
+                p_wtd = weighted.predict_proba(test[FEATURES])[:, 1]
+                entries[f"{kind}_weighted"] = (p_wtd, p_wtd)
+                entries[f"{kind}_weighted_x_sales"] = (p_wtd, p_wtd * gmv)
 
-        for name, s in scores.items():
-            money = sales_at_risk_reached(test, s, top_k)
-            rows.append({
-                "test_cutoff": t, "model": name,
-                "n_train_rows": len(train), "n_test_sellers": len(test),
-                "churn_rate": test["churned"].mean(),
-                "auc": roc_auc_score(test["churned"], s),
-                "avg_precision": average_precision_score(test["churned"], s),
-                **money,
-            })
-    return pd.DataFrame(rows)
+        # big sellers = top 10% by gmv_90 among the sellers active on the test date (uses only
+        # information available at the cutoff)
+        big = gmv >= np.quantile(gmv, BIG_SELLER_Q)
+        y = test["churned"].to_numpy()
+        for name, (prob, rank_score) in entries.items():
+            for k in ks:
+                money = sales_at_risk_reached(test, rank_score, k)
+                k_rows.append({"test_cutoff": t, "model": name, "top_k": k, **money})
+                picks.append(top_sellers(test, rank_score, k)[["seller_id", "cutoff", "churned"]]
+                             .assign(model=name, top_k=k))
+                if k == top_k:
+                    rows.append({
+                        "test_cutoff": t, "model": name,
+                        "n_train_rows": len(train), "n_test_sellers": len(test),
+                        "churn_rate": test["churned"].mean(),
+                        "auc": roc_auc_score(y, prob),
+                        "avg_precision": average_precision_score(y, prob),
+                        **money,
+                    })
+            for group, mask in [("top10pct_sellers", big), ("other_sellers", ~big)]:
+                size_rows.append({
+                    "test_cutoff": t, "model": name, "group": group,
+                    "n_sellers": int(mask.sum()), "n_churners": int(y[mask].sum()),
+                    "churn_rate": float(y[mask].mean()),
+                    "gmv_90_cutoff_top10pct": float(np.quantile(gmv, BIG_SELLER_Q)),
+                    "auc": _auc(y[mask], prob[mask]),
+                })
+    return pd.DataFrame(rows), pd.DataFrame(size_rows), pd.DataFrame(k_rows), pd.concat(picks, ignore_index=True)
 
 
-def summarize(bt: pd.DataFrame) -> pd.DataFrame:
+def summarize(bt: pd.DataFrame, size: pd.DataFrame | None = None) -> pd.DataFrame:
     g = bt.groupby("model")
     out = g.agg(
         months_tested=("test_cutoff", "nunique"),
@@ -269,15 +371,105 @@ def summarize(bt: pd.DataFrame) -> pd.DataFrame:
         churners_in_top_k=("churners_in_top_k", "sum"),
     )
     out["share_reached"] = out["sales_at_risk_reached"] / out["sales_at_risk_total"]
+    if size is not None:
+        a = size.pivot_table(index="model", columns="group", values="auc", aggfunc="mean")
+        out["mean_auc_top10pct_sellers"] = a["top10pct_sellers"]
+        out["mean_auc_other_sellers"] = a["other_sellers"]
     return out.sort_values("share_reached", ascending=False).reset_index()
+
+
+def _months_beating(share: pd.DataFrame, model: str, rule: str) -> float:
+    return np.nan if model == rule else int((share[model] > share[rule]).sum())
+
+
+def _as_counts(out: pd.DataFrame) -> pd.DataFrame:
+    for c in ["months_beating_biggest_sellers_rule", "months_beating_silent_x_sales_rule"]:
+        out[c] = out[c].astype("Int64")
+    return out
+
+
+def spread_by_model(bt: pd.DataFrame, models: list[str] = APPROACHES) -> pd.DataFrame:
+    """Total share reached plus how it moves from month to month, and how often each approach
+    beats the 'biggest recent sellers' and 'silent x sales' rules in the same month."""
+    share = bt.pivot(index="test_cutoff", columns="model", values="share_reached")
+    rows = []
+    for m in models:
+        g = bt[bt["model"] == m]
+        rows.append({
+            "model": m,
+            "months_tested": share[m].notna().sum(),
+            "share_reached_all_months": g["sales_at_risk_reached"].sum() / g["sales_at_risk_total"].sum(),
+            "median_month": share[m].median(),
+            "lowest_month": share[m].min(),
+            "highest_month": share[m].max(),
+            "months_beating_biggest_sellers_rule": _months_beating(share, m, BENCHMARK),
+            "months_beating_silent_x_sales_rule": _months_beating(share, m, SILENT_X_SALES),
+        })
+    return _as_counts(pd.DataFrame(rows))
+
+
+def by_top_k(bt_k: pd.DataFrame, models: list[str] = APPROACHES) -> pd.DataFrame:
+    """Same backtest with 50, 100 and 200 sellers contacted a month."""
+    rows = []
+    for k, gk in bt_k.groupby("top_k"):
+        share = gk.pivot(index="test_cutoff", columns="model", values="share_reached")
+        for m in models:
+            g = gk[gk["model"] == m]
+            rows.append({
+                "model": m, "top_k": int(k),
+                "share_reached": g["sales_at_risk_reached"].sum() / g["sales_at_risk_total"].sum(),
+                "months_beating_biggest_sellers_rule": _months_beating(share, m, BENCHMARK),
+                "months_beating_silent_x_sales_rule": _months_beating(share, m, SILENT_X_SALES),
+            })
+    return _as_counts(pd.DataFrame(rows))
+
+
+def _sales_once(so: pd.DataFrame, rows: pd.DataFrame) -> float:
+    """Sales in the 90 days before each (seller, cutoff) in rows, counting each order only once."""
+    m = rows[["seller_id", "cutoff"]].merge(so[["order_id", "seller_id", "ts", "gmv"]], on="seller_id")
+    m = m[(m["ts"] >= m["cutoff"] - pd.Timedelta(days=ACTIVE_DAYS)) & (m["ts"] < m["cutoff"])]
+    return float(m.drop_duplicates(["order_id", "seller_id"])["gmv"].sum())
+
+
+def count_each_order_once(so: pd.DataFrame, panel: pd.DataFrame, picks: pd.DataFrame,
+                          models: list[str] = APPROACHES) -> pd.DataFrame:
+    """Reais totals over all test months with no repeats. A seller who stops selling stays 'active'
+    at up to three monthly cutoffs, so adding up the months counts the same orders several times."""
+    months = picks["cutoff"].unique()
+    at_risk = panel[panel["cutoff"].isin(months) & (panel["churned"] == 1)]
+    total = _sales_once(so, at_risk)
+    rows = []
+    for (m, k), g in picks[picks["model"].isin(models)].groupby(["model", "top_k"]):
+        churners = g[g["churned"] == 1]
+        reached = _sales_once(so, churners)
+        rows.append({
+            "model": m, "top_k": int(k),
+            "sales_at_risk_total_once": total,
+            "sales_at_risk_reached_once": reached,
+            "share_reached_once": reached / total,
+            "picks": len(g), "distinct_sellers_picked": g["seller_id"].nunique(),
+            "churner_picks": len(churners), "distinct_churners_reached": churners["seller_id"].nunique(),
+        })
+    return pd.DataFrame(rows)
+
+
+def what_if(money: pd.DataFrame, model: str = MAIN_MODEL, top_k: int = TOP_K) -> pd.DataFrame:
+    """ASSUMPTION, not a result: if outreach saved a share of the sales at risk it reaches."""
+    reached = money.loc[(money["model"] == model) & (money["top_k"] == top_k), "sales_at_risk_reached_once"].iloc[0]
+    return pd.DataFrame({
+        "model": model,
+        "sales_at_risk_reached_once": reached,
+        "assumed_share_saved": WHATIF_SAVED,
+        "assumed_reais_saved": [reached * s for s in WHATIF_SAVED],
+        "note": "assumption, not a result",
+    })
 
 
 def feature_importance(panel: pd.DataFrame) -> pd.DataFrame:
     """Which features matter most? Permutation importance on the final test month."""
     cuts = sorted(panel["cutoff"].unique())
     t = cuts[-1]
-    train = panel[panel["cutoff"] + pd.Timedelta(days=CHURN_DAYS) <= t]
-    test = panel[panel["cutoff"] == t]
+    train, test = group_rare(panel[panel["cutoff"] + pd.Timedelta(days=CHURN_DAYS) <= t], panel[panel["cutoff"] == t])
     m = make_model("gradient_boosting").fit(train[FEATURES], train["churned"])
     r = permutation_importance(m, test[FEATURES], test["churned"], scoring="roc_auc",
                                n_repeats=10, random_state=SEED)
@@ -286,32 +478,68 @@ def feature_importance(panel: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------- charts
-def make_charts(bt: pd.DataFrame, summary: pd.DataFrame, out: Path) -> None:
+COLORS = {"logistic_x_sales": "#1f4e79", "gradient_boosting_x_sales": "#ed7d31",
+          "logistic_plain": "#9dc3e6", "gradient_boosting_plain": "#f4b183",
+          "rule_biggest_sellers": "#bfbfbf", "rule_days_since_last_order": "#7f7f7f",
+          "rule_silent_x_sales": "#7030a0"}
+LINE_ORDER = [BENCHMARK, "rule_days_since_last_order", SILENT_X_SALES, COMPARISON_MODEL, MAIN_MODEL]
+
+
+def make_charts(bt: pd.DataFrame, summary: pd.DataFrame, size: pd.DataFrame,
+                topk: pd.DataFrame, out: Path) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    palette = {"gradient_boosting": "#1f4e79", "logistic": "#5b9bd5",
-               "rule_days_since_last_order": "#7f7f7f", "rule_biggest_sellers": "#bfbfbf"}
+    def finish(fig, ax, name):
+        ax.spines[["top", "right"]].set_visible(False)
+        fig.tight_layout()
+        fig.savefig(out / name, dpi=150)
+        plt.close(fig)
+
+    # 1) month by month: main model, comparison model and the three rules
     fig, ax = plt.subplots(figsize=(9, 4.5))
-    for name, g in bt.groupby("model"):
-        ax.plot(g["test_cutoff"], g["share_reached"] * 100, marker="o", label=name, color=palette.get(name))
+    for name in LINE_ORDER:
+        g = bt[bt["model"] == name]
+        ax.plot(g["test_cutoff"], g["share_reached"] * 100, marker="o", label=name, color=COLORS[name],
+                lw=2.5 if name == MAIN_MODEL else 1.5)
     ax.set_ylabel(f"% of sales at risk reached (top {TOP_K} sellers)")
     ax.set_title("Backtest: share of at-risk sales reached each month")
     ax.legend(fontsize=8)
-    ax.spines[["top", "right"]].set_visible(False)
-    fig.tight_layout()
-    fig.savefig(out / "backtest_sales_reached.png", dpi=150)
-    plt.close(fig)
+    finish(fig, ax, "backtest_sales_reached.png")
 
-    fig, ax = plt.subplots(figsize=(7, 3.5))
+    # 2) all approaches, all months together
+    fig, ax = plt.subplots(figsize=(8, 4))
     s = summary.sort_values("share_reached")
-    ax.barh(s["model"], s["share_reached"] * 100, color=[palette.get(m) for m in s["model"]])
+    ax.barh(s["model"], s["share_reached"] * 100, color=[COLORS[m] for m in s["model"]])
     ax.set_xlabel("% of at-risk sales reached, all test months")
-    ax.spines[["top", "right"]].set_visible(False)
-    fig.tight_layout()
-    fig.savefig(out / "model_comparison.png", dpi=150)
-    plt.close(fig)
+    finish(fig, ax, "model_comparison.png")
+
+    # 3) AUC for the biggest 10% of sellers vs the rest
+    show = ["rule_days_since_last_order", "logistic_plain", "gradient_boosting_plain"]
+    a = size[size["model"].isin(show)].groupby(["model", "group"])["auc"].mean().unstack().reindex(show)
+    fig, ax = plt.subplots(figsize=(7, 4))
+    x = np.arange(len(show))
+    ax.bar(x - 0.2, a["top10pct_sellers"], 0.4, label="top 10% of sellers by sales", color="#1f4e79")
+    ax.bar(x + 0.2, a["other_sellers"], 0.4, label="all other sellers", color="#9dc3e6")
+    ax.set_xticks(x)
+    ax.set_xticklabels([m.replace("_", chr(10), 1) for m in show], fontsize=8)
+    ax.set_ylabel("average AUC over the test months")
+    ax.set_ylim(0.5, 1.0)
+    ax.legend(fontsize=8)
+    finish(fig, ax, "auc_by_seller_size.png")
+
+    # 4) share reached vs number of sellers contacted
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for name in LINE_ORDER:
+        g = topk[topk["model"] == name].sort_values("top_k")
+        ax.plot(g["top_k"], g["share_reached"] * 100, marker="o", label=name, color=COLORS[name],
+                lw=2.5 if name == MAIN_MODEL else 1.5)
+    ax.set_xticks(sorted(topk["top_k"].unique()))
+    ax.set_xlabel("sellers contacted a month")
+    ax.set_ylabel("% of sales at risk reached")
+    ax.legend(fontsize=8)
+    finish(fig, ax, "share_by_top_k.png")
 
 
 # ---------------------------------------------------------------- main
@@ -321,15 +549,25 @@ def run(data_dir: Path, out_dir: Path, top_k: int = TOP_K) -> dict:
     so = load_seller_orders(data_dir)
     sellers = load_sellers(data_dir)
     panel = build_panel(so, sellers)
-    bt = rolling_backtest(panel, top_k)
-    summary = summarize(bt)
+    bt, size, bt_k, picks = rolling_backtest(panel, top_k)
+    summary = summarize(bt, size)
+    spread = spread_by_model(bt)
+    topk = by_top_k(bt_k)
+    money = count_each_order_once(so, panel, picks)
+    whatif = what_if(money, top_k=top_k)
     imp = feature_importance(panel)
 
     bt.to_csv(out / "backtest_by_month.csv", index=False)
+    size.to_csv(out / "auc_by_seller_size.csv", index=False)
     summary.to_csv(out / "backtest_summary.csv", index=False)
+    spread.to_csv(out / "spread_by_model.csv", index=False)
+    topk.to_csv(out / "backtest_by_top_k.csv", index=False)
+    money.to_csv(out / "money_each_order_once.csv", index=False)
+    whatif.to_csv(out / "what_if_savings.csv", index=False)
     imp.to_csv(out / "feature_importance.csv", index=False)
-    make_charts(bt, summary, out)
-    return {"panel": panel, "backtest": bt, "summary": summary, "importance": imp}
+    make_charts(bt, summary, size, topk, out)
+    return {"panel": panel, "backtest": bt, "summary": summary, "size": size, "spread": spread,
+            "top_k": topk, "money_once": money, "what_if": whatif, "importance": imp}
 
 
 if __name__ == "__main__":
@@ -340,3 +578,6 @@ if __name__ == "__main__":
     a = ap.parse_args()
     res = run(Path(a.data), Path(a.out), a.top_k)
     print(res["summary"].to_string(index=False))
+    print(res["spread"].to_string(index=False))
+    print(res["top_k"].to_string(index=False))
+    print(res["money_once"].to_string(index=False))
