@@ -1,0 +1,13 @@
+model,top_k,share_reached,months_beating_biggest_sellers_rule
+logistic_x_sales,50,0.33371706348647634,10
+gradient_boosting_x_sales,50,0.3382710660153544,10
+rule_biggest_sellers,50,0.09957233724123293,
+rule_days_since_last_order,50,0.05402830431055793,2
+logistic_x_sales,100,0.44240988370003975,10
+gradient_boosting_x_sales,100,0.4657663583294197,10
+rule_biggest_sellers,100,0.19588649278649084,
+rule_days_since_last_order,100,0.12171733226649033,1
+logistic_x_sales,200,0.5819807495196581,10
+gradient_boosting_x_sales,200,0.6081206031205619,10
+rule_biggest_sellers,200,0.32576402591923387,
+rule_days_since_last_order,200,0.2642329672274555,2

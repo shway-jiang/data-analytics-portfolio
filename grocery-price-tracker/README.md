@@ -1,6 +1,6 @@
 # Canadian Grocery Price Tracker
 
-**Status:** collecting data daily (Oct 11 – Nov 9, 2026); analysis to follow
+**Status:** collecting data daily (Oct 29 – Dec 1, 2026); analysis to follow
 
 A personal portfolio project on Canada's cost of living. It automatically records the price of the same 15-item grocery basket every day for 30 days at four online grocery stores, then compares the stores with each other and with Statistics Canada's official average prices.
 
